@@ -1,0 +1,38 @@
+{
+  "account_id": "YOUR_CLOUDFLARE_ACCOUNT_ID",
+  "database_id": "YOUR_D1_DATABASE_UUID",
+  "database_name": "linro",
+  "admin_host": "admin.example.com",
+  "redirect_hosts": [
+    "go.example.com",
+    "s.example.net",
+    "example.org"
+  ],
+  "access_issuer": "https://your-team.cloudflareaccess.com",
+  "access_aud": "YOUR_ACCESS_APPLICATION_AUD",
+  "owner_email": "owner@example.com",
+  "analytics_enabled": false,
+  "analytics_dataset": "linro_clicks",
+  "auth_rate_namespace": "21001",
+  "write_rate_namespace": "21002",
+  "redirect_rate_namespace": "21003",
+  "redirect_rate_limit": 300,
+  "query_forward_allowlist": [
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_term",
+    "utm_content"
+  ],
+  "private_target_allowlist": [],
+  "expired_link_status": 404,
+  "password_rate_namespace": "21004",
+  "password_rate_limit": 5,
+  "redirect_cache_namespace_id": "",
+  "redirect_cache_ttl": 300,
+  "cloudflare_device_type_enabled": false,
+  "browser_timezone_enabled": false,
+  "source_url": "https://github.com/liying-official/Linro",
+  "admin_worker_name": "linro-admin",
+  "redirect_worker_name": "linro-redirect"
+}

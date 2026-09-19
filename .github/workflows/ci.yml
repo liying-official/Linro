@@ -1,0 +1,27 @@
+name: Validate Linro
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+      - name: Print pinned Wrangler, Miniflare, workerd and esbuild versions
+        run: npm run toolchain:versions
+      - run: npm run check
+      - run: npm test
+      - name: Native workerd security smoke tests (no cloud credentials)
+        run: npm run test:runtime
+      - run: npm run build
+      - name: Real Chromium CSP navigation regression (separate from workerd)
+        run: npm run test:browser
+      - run: npm run deploy:dry-run
+      - run: npm run package:source
