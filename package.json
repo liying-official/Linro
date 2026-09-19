@@ -1,0 +1,49 @@
+{
+  "name": "linro",
+  "version": "1.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Linro — Cloudflare-native private link management with a bilingual GUI, D1 and Access.",
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "scripts": {
+    "build:worker": "tsc -p tsconfig.worker.json",
+    "build:web": "vite build --config apps/admin/vite.config.ts",
+    "build": "npm run check && npm run build:worker && npm run build:web",
+    "check": "tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "npm run build:worker && node --test tests/*.test.mjs",
+    "configure": "node scripts/configure.mjs",
+    "preflight": "node scripts/preflight.mjs",
+    "local:init": "node scripts/local-init.mjs",
+    "dev:admin": "node scripts/local-wrangler.mjs admin",
+    "dev:redirect": "node scripts/local-wrangler.mjs redirect",
+    "db:migrate:local": "node scripts/local-wrangler.mjs migrate",
+    "db:migrate": "npm run preflight && wrangler d1 migrations apply DB --remote --config apps/admin/wrangler.jsonc",
+    "deploy": "npm run preflight && npm run build && npm run test && npm run test:runtime && npm run deploy:admin && npm run deploy:redirect",
+    "deploy:admin": "npm run preflight && wrangler deploy --config apps/admin/wrangler.jsonc",
+    "deploy:redirect": "npm run preflight && wrangler deploy --config apps/redirect/wrangler.jsonc && npm run verify:deployment",
+    "deploy:dry-run": "wrangler deploy --dry-run --config apps/admin/wrangler.jsonc && wrangler deploy --dry-run --config apps/redirect/wrangler.jsonc",
+    "backup": "wrangler d1 export DB --remote --config apps/admin/wrangler.jsonc --output Linro-backup.sql",
+    "db:seed:local": "node scripts/local-wrangler.mjs seed",
+    "package:source": "node scripts/package-source.mjs",
+    "test:runtime": "npm run toolchain:versions && npm run test:runtime:canary && node --test tests/runtime/fetch-security.test.mjs tests/runtime/link-controls.test.mjs",
+    "audit:links": "npm run build:worker && node scripts/security-audit.mjs",
+    "toolchain:versions": "node scripts/runtime-toolchain.mjs",
+    "test:runtime:canary": "node --test tests/runtime/api-canary.test.mjs",
+    "verify:deployment": "node scripts/check-deployment.mjs",
+    "test:browser": "npm run build:worker && node --test --test-concurrency=1 tests/browser/csp-navigation.test.mjs"
+  },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "5.8.3",
+    "vite": "^7.1.0",
+    "wrangler": "4.132.0"
+  },
+  "license": "AGPL-3.0-only"
+}

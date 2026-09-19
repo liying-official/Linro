@@ -1,0 +1,67 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "account_id": "00000000000000000000000000000000",
+  "compatibility_date": "2026-09-15",
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": {
+    "enabled": false
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "linro",
+      "database_id": "11111111-1111-4111-8111-111111111111",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+  "name": "linro-admin",
+  "main": "src/worker/index.ts",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+  "routes": [
+    {
+      "pattern": "admin.example.com",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "SOURCE_URL": "",
+    "BROWSER_TIMEZONE_ENABLED": "true",
+    "CLOUDFLARE_DEVICE_TYPE_ENABLED": "false",
+    "REDIRECT_CACHE_TTL": "300",
+    "QUERY_FORWARD_ALLOWLIST": "[\"utm_source\",\"utm_medium\",\"utm_campaign\",\"utm_term\",\"utm_content\"]",
+    "PRIVATE_TARGET_ALLOWLIST": "[]",
+    "EXPIRED_LINK_STATUS": "404",
+    "ENVIRONMENT": "production",
+    "ADMIN_ORIGIN": "https://admin.example.com",
+    "ACCESS_ISSUER": "https://your-team.cloudflareaccess.com",
+    "ACCESS_AUD": "YOUR_ACCESS_APPLICATION_AUD",
+    "BOOTSTRAP_OWNER_EMAIL": "owner@example.com",
+    "CLOUDFLARE_ACCOUNT_ID": "11111111111111111111111111111111",
+    "ANALYTICS_ENABLED": "false",
+    "ANALYTICS_DATASET": "linro_clicks"
+  },
+  "ratelimits": [
+    {
+      "name": "AUTH_LIMITER",
+      "namespace_id": "21001",
+      "simple": {
+        "limit": 300,
+        "period": 60
+      }
+    },
+    {
+      "name": "WRITE_LIMITER",
+      "namespace_id": "21002",
+      "simple": {
+        "limit": 120,
+        "period": 60
+      }
+    }
+  ]
+}
