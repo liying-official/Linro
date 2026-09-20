@@ -22,6 +22,8 @@ jobs:
         run: npm run test:runtime
       - run: npm run build
       - name: Real Chromium CSP navigation regression (separate from workerd)
+        env:
+          CFL_CHROMIUM_PATH: /usr/bin/google-chrome
         run: npm run test:browser
       - run: npm run deploy:dry-run
       - run: npm run package:source
