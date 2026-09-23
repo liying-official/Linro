@@ -1085,7 +1085,7 @@ Additional PATCH fields:`version` must be the current positive integer version;`
 
 URL validation rejects illegal control characters, backslashes, username / password, non-HTTP(S) schemes, and similar input; it also enforces admin-host / managed-short-host loop checks and private-target policy. An allowed target does not mean “the server fetched and verified this site successfully”: the source does not fetch destination pages or perform DNS resolution to prove a hostname can never resolve privately.
 
-Slug reserved words are rejected case-insensitively:`admin`, `api`, `linro`, `health`, `assets`, `robots`, `favicon`, `cdn-cgi`, `.well-known` and the `__linro_` prefix; values containing dots also fail ordinary slug syntax. Uniqueness for valid business slugs is case-sensitive.
+Only `health`, `cdn-cgi`, and the `__linro_` prefix are reserved, case-insensitively. `Linro`, `linro`, `admin`, `api`, `assets`, `robots`, and `favicon` are valid business slugs. Business slugs remain case-sensitive and must contain 1–64 ASCII letters, digits, `_`, or `-`; dotted paths such as `.well-known`, `robots.txt`, and `favicon.ico` still fail slug syntax. The `/Linro/v1` API on the separate admin host is unchanged.
 
 Passwords are not trimmed, so leading / trailing spaces are part of the password. Never put passwords in logs or URL query strings. If the root secret is missing or malformed, creating / resetting a password fails; the system does not fall back to storing plaintext. Text content may contain TAB / CR / LF but rejects other restricted control characters and invalid Unicode round-trips; it is not rendered as HTML.
 

@@ -108,7 +108,7 @@ PATCH 额外字段：`version` 为当前正整数版本；`reset_redirect_count`
 
 URL 校验拒绝非法控制字符、反斜杠、用户名 / 密码、非 HTTP(S) scheme 等；还须通过管理主机 / 已管理短链主机环路与私有目标策略检查。允许的目标不是“服务端已经实际请求验证成功”的保证，源码不抓取目标网页，也不执行 DNS 解析来证明域名绝不解析到私网。
 
-slug 禁用保留字，比较保留字时不区分大小写：`admin`、`api`、`linro`、`health`、`assets`、`robots`、`favicon`、`cdn-cgi`、`.well-known`，以及 `__linro_` 前缀；其中含点的值本身也不符合普通 slug 字符规则。有效业务 slug 的唯一约束区分大小写。
+短码仅保留 `health`、`cdn-cgi`，以及 `__linro_` 前缀；检查这些保留项时不区分大小写。`Linro`、`linro`、`admin`、`api`、`assets`、`robots`、`favicon` 均可用作业务短码。业务短码仍区分大小写，须满足 1–64 个 ASCII 字母、数字、`_` 或 `-`；`.well-known`、`robots.txt`、`favicon.ico` 等含点路径仍不符合短码语法。管理域名下的 `/Linro/v1` API 不受影响。
 
 密码不会 trim，因此前后空格属于密码内容；不要在日志或 URL 查询参数中传密码。根 secret 未配置或格式不正确时，新增 / 重设密码会失败，不会存明文回退。文本允许 TAB / CR / LF，但拒绝其他受限控制字符和不合法的 Unicode 往返值；不作为 HTML 渲染。
 

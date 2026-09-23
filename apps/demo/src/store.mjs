@@ -50,7 +50,7 @@ function normalize(body, old) {
   const row = { id: uid(++serial), domain_id: state.domains[0]?.id, slug: `demo-${serial}`, title: '', description: '', response_mode: 'redirect', target_url: '', text_content: '', redirect_code: 302, query_mode: 'discard', enabled: 1, expires_at: null, cache_ttl: 0, geo_rules: [], password_protected: false, max_redirects: null, redirect_count: 0, block_vpn: 0, created_by: user().id, created_at: now(), updated_at: now(), version: 1, rule_revision: 1, ...old };
   for (const field of ['domain_id','slug','title','description','response_mode','target_url','text_content','redirect_code','query_mode','enabled','expires_at','cache_ttl','geo_rules','max_redirects','block_vpn']) if (body[field] !== undefined) row[field] = body[field];
   if (!row.slug) row.slug = `demo-${serial}`;
-  if (!/^[A-Za-z0-9_-]{1,64}$/.test(row.slug)) deny('Invalid demo slug');
+  if (typeof row.slug !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(row.slug) || ['health','cdn-cgi'].includes(row.slug.toLowerCase()) || row.slug.toLowerCase().startsWith('__linro_')) deny('Invalid or reserved demo slug',400,'invalid_slug');
   find(state.domains, row.domain_id);
   if (state.links.some(l => l.id !== row.id && l.domain_id === row.domain_id && l.slug === row.slug)) deny('Duplicate demo slug', 409, 'conflict');
   if (!['redirect','text'].includes(row.response_mode)) deny('Invalid response mode');

@@ -54,5 +54,5 @@ test('new internal assets are served and namespace cannot be allocated as a shor
     assert.equal((await redirect.fetch(new Request('https://go.example.com/__Linro_assets/'+name), env)).status, 200);
     assert.equal((await redirect.fetch(new Request('https://go.example.com/__cfl_assets/'+name), env)).status, 404);
   }
-  for (const value of ['Linro', 'linro', '__Linro_unlock', '__linro_browser', '__LINRO_ASSETS']) assert.throws(() => slug(value), e => e.status === 400);
+  for (const value of ['health', 'cdn-cgi', '__Linro_unlock', '__linro_browser', '__LINRO_ASSETS']) assert.throws(() => slug(value), e => e.status === 400);
 });

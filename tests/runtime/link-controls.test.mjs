@@ -36,6 +36,21 @@ async function seed(db, {hash=null,cap=null,geo='[]'}={}) {
 async function verifier(mf) {
   const r=await mf.dispatchFetch('https://go.example.com/__test__/password',{redirect:'manual',method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password})});assert.equal(r.status,200);return r.json();
 }
+
+test('workerd resolves brand and former admin-only slugs while keeping live system routes', async t => {
+  const {mf,db}=await fixture(t);
+  for (const value of ['Linro','linro','LINRO','admin','api','assets','robots','favicon']) {
+    await db.prepare('INSERT INTO links(id,domain_id,slug,target_url,redirect_code,created_at,updated_at) VALUES(?,?,?,?,302,0,0)').bind(crypto.randomUUID(),domain,value,'https://example.org/'+value).run();
+    for (const method of ['GET','HEAD']) {
+      const response=await mf.dispatchFetch('https://go.example.com/'+value,{method,redirect:'manual'});
+      assert.equal(response.status,302,value);assert.equal(response.headers.get('location'),'https://example.org/'+value);
+    }
+  }
+  assert.equal((await mf.dispatchFetch('https://go.example.com/health',{redirect:'manual'})).status,200);
+  assert.equal((await mf.dispatchFetch('https://go.example.com/robots.txt',{redirect:'manual'})).status,200);
+  assert.equal((await mf.dispatchFetch('https://go.example.com/__Linro_assets/browser.js',{redirect:'manual'})).status,200);
+  assert.equal((await mf.dispatchFetch('https://go.example.com/cdn-cgi',{redirect:'manual'})).status,404);
+});
 test('workerd executes peppered PBKDF2 at configured cost and verifies only the right password', {timeout:60000},async t=>{
   const {mf}=await fixture(t); const r=await verifier(mf); assert.equal(r.valid,true);assert.equal(r.invalid,false);assert.match(r.hash,/^v1\$pbkdf2-sha256\$100000\$/);
 });
