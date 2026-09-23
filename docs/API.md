@@ -1,6 +1,6 @@
 # Linro v1.0.1 API
 
-基础路径：`https://ADMIN_HOST/Linro/v1`。生产环境始终需要有效 Cloudflare Access assertion；自动化另外需要应用 Bearer token。部署配置、服务 token 的完整接入流程见 README 第 0 / 11 节。
+基础路径：`https://ADMIN_HOST/Linro/v1`。生产环境始终需要有效 Cloudflare Access assertion；自动化另外需要应用 Bearer token。部署配置、服务 token 的完整接入流程见 README 的部署与自动化接入章节。
 
 ## 响应约定
 
@@ -64,7 +64,7 @@ PATCH 提供需要修改的字段及当前 `version`，例如：
 
 服务器更新后 version 加 1。过期版本返回 409；不要自动覆盖，先重新读取并处理冲突。DELETE 同样必须提供 `?version=N`。响应中有 `short_url`、hostname、created_at、updated_at、version 等。
 
-**Query**：discard 忽略传入；merge/replace 仅传入部署允许的精确参数名（默认五个 utm_*）。merge 仍目标同名键优先；replace 会清空旧 query，即便来访过滤后为空。敏感键禁止配置；可识别的认证/登录/重置/令牌/跳转参数目标必须 discard，否则写入返回 400 unsafe_query_mode；旧同类目标在公开读路径直接采用 discard，数据库不自动改写。**缓存**：cache_ttl=0 为 no-store，非零是 private 客户端缓存，最大 3600 秒，且不能超过到期时间剩余长度。有地区规则、密码或次数上限时强制 no-store，忽略非零客户端 TTL。
+**Query**：discard 忽略传入；merge/replace 仅传入部署允许的精确参数名（默认五个 utm_*）。merge 仍目标同名键优先；replace 会清空旧 query，即便来访过滤后为空。敏感键禁止配置；可识别的认证/登录/重置/令牌/跳转参数目标必须 discard，否则写入返回 400 unsafe_query_mode；旧同类目标在公开读路径直接采用 discard，数据库不自动改写。**缓存**：cache_ttl=0 为 no-store，非零是 private 客户端缓存，最大 3600 秒，且不能超过到期时间剩余长度。有地区规则、密码、次数上限或浏览器检查流程时强制 no-store，忽略非零客户端 TTL。
 
 ## 列表查询
 
@@ -124,7 +124,7 @@ status 支持 `all`、`active`、`disabled`、`expired`、`exhausted`（已达�
 
 客户端应显示错误 message 与 request_id。对 GET 可进行有限退避重试；创建、导入、批量写入未实现客户端 idempotency-key，重试前查询确认。
 
-## v1.0.2-fix 归属与新增响应
+## 链接归属与响应边界
 
 交互式 Owner/Admin 的 link_write_scope 为 workspace；Editor、Viewer 以及**所有应用 token**为 owned，但仍必须先满足具体操作 scope。owned 的更新、删除和批量操作必须满足 link.created_by == principal.user.id；不是 token_id。同一用户的多个 token 共享归属，建议 CI 使用独立 Editor。读取仍遵循团队共享模型，并非用户隐私隔离。created_by 为 null 的行只允许交互式 Owner/Admin 治理。客户端不得在创建/导入/更新中指定 created_by。
 
@@ -149,7 +149,7 @@ status 支持 `all`、`active`、`disabled`、`expired`、`exhausted`（已达�
 到期默认公开 404（显式 EXPIRED_LINK_STATUS=410 可保留旧 410），默认 no-store 不变。未知/停用/过期不会自动跳首页。通过配置扩大查询白名单或私有例外是部署权限，不是应用 API scope；现有 settings PATCH 仍只允许 site_name。
 
 
-## v1.1.0：可选缓存、分流、密码与上限
+## 可选缓存、地区分流、密码与次数上限
 
 `/session` 的 `features` 增加 `redirect_cache`（binding 是否存在）、`cache_consistency: "d1-guarded"`、`passwords_configured`（Admin secret 格式是否已配置）；它们不是对 KV/D1 连通性或两端 secret 一致性的线上探测。前端没有设置 namespace/secret 的 API；这些只由部署者通过配置管理。
 
@@ -190,7 +190,7 @@ Web JSON/CSV保留非秘密控制信息；导入时不恢复counter/readonly标�
 
 - 普通GET/HEAD从request.cf选择国家优先、大洲其次、默认最后；每次最新D1状态授权，KV命中不能跳过。地理规则不是认证，也不使用访客自填的country头。
 - 受密码保护且无有效cookie：200 HTML挑战，无Location；HEAD没有body，仍无目标Location。页面使用自源CSS，不执行脚本。
-- `POST /__Linro_unlock/<slug>`：来源判断按文末v1.1.0-fix规则，拒绝显式外站与矛盾metadata；Content-Type须为application/x-www-form-urlencoded且只包含单个password字段，实际body上限8192字节；错误密码401、限流429、依赖失败503。
+- `POST /__Linro_unlock/<slug>`：来源判断按下文公开解锁来源规则，拒绝显式外站与矛盾metadata；Content-Type须为application/x-www-form-urlencoded且只包含单个password字段，实际body上限8192字节；错误密码401、限流429、依赖失败503。
 - 正确密码：303至本站`/<slug>`并设置15分钟HttpOnly/Secure/SameSite=Lax cookie；这次不计入quota/AE。下一次GET才返回设定的目标状态码，POSTbody永不转发目标。
 - 受限的最终GET与HEAD，各次返回目标Location前原子增加1；重复HEAD/GET都是不同请求。无上限时不写该counter，原AE仍仅统计GET。
 - 耗尽：403纯文本，`Content-Language`，no-store，无Location。中文“此链接请求次数已到达上限，请联系管理员”，英文“This link has reached its request limit. Please contact the administrator.”；HEAD无body。Accept-Language或`_Linro_lang`决定UI语言，内部语言参数不透传。
@@ -205,14 +205,14 @@ Web JSON/CSV保留非秘密控制信息；导入时不恢复counter/readonly标�
 所有写入先提交D1和审计，再尽力维护KV；缓存维护失败不意味着业务事务回滚。KV不是备份，也不是调用次数来源。密码计算/解锁cookie不依赖KV里是否带密码标志。
 
 
-## v1.1.0-fix 解锁端点兼容性补充
+## 公开解锁来源规则
 
 管理 API 字段、权限、计数语义及迁移不变。公开 `/__Linro_unlock/<slug>` 的非POST方法统一405，`Allow: POST`；HEAD无body。POST的Origin:null/缺失仅在严格同源Fetch Metadata下进入密码验证，显式外站Origin不论Metadata都403；正确Origin可兼容无Metadata客户端，但不得带矛盾的site值。后台CSRF不接受这个例外。
 
 来源403为纯文本“请从短链密码页提交。”或“Please submit the form from the short link password page.”；沿用Accept-Language及_Linro_lang选择机制、no-store，无Location/Set-Cookie。错误密码仍401，正确密码内部303不计额度。不存在、停用或已耗尽的链接继续遵循原先查询/访问控制顺序，不利用错误提示泄露目标。
 
 
-## v1.1.1：纯文本与精确链接选择
+## 纯文本与精确链接选择
 
 ### 纯文本写入及读取
 
@@ -247,7 +247,7 @@ UUID为示意值，必须换成真实存在的link.id，而不是slug或domain.i
 
 GUI 导入按单批最多10行且完整JSON UTF-8编码不超过262144字节分批。HTTP API仍严格执行该请求体字节上限，直接调用者同样需要分批；已有成功批次不会因后续失败回滚。
 
-## v1.1.2：浏览器检查与VPN统计
+## 浏览器检查与 VPN 统计
 
 Links创建/PATCH/导入支持block_vpn（JSON boolean或0/1；禁止字符串、null及未知类型）。未指定时新建默认0、PATCH保留旧值。启用新策略需要BROWSER_CHECK_SECRET；缺失返回503 browser_check_unconfigured，而非悄悄公开。读取/JSON/CSV包含此非秘密标志；日志记录flag，不记录浏览器证明或root。Editor/API令牌归属限制不变。直接SQL更新该flag也通过0004触发器更新rule_revision，不改计数。
 
@@ -259,7 +259,7 @@ Links创建/PATCH/导入支持block_vpn（JSON boolean或0/1；禁止字符串�
 
 原clicks/成功趋势/国家/来源/设备及每日归档只算double1>0的成功GET；新拒绝double1=0。每个新统计字段遵循同一link_id/link_ids范围。旧事件缺新字段，不回填猜测VPN/浏览器时区；旧日归档不增加不存在的历史维度。详细blob/double位置、拒绝码和部署顺序见README0.0/10.7。
 
-### v1.1.2-fix 浏览器提交补充
+### 浏览器提交与成功响应
 
 JSON是**成功响应协商**，不是新增请求体格式：仍为application/x-www-form-urlencoded，仅challenge/timezone两个字段。application/json请求体仍415；非法来源、签名、规则、密码与策略均拒绝且无Set-Cookie。Accept不参与权限判断。密码解锁接口仍使用原303，不改后台API CSRF。
 
