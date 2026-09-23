@@ -18,10 +18,11 @@ const valid={account_id:'a'.repeat(32),database_id:'12345678-1234-4234-8234-1234
 function sandbox(t){const dir=mkdtempSync(join(tmpdir(),'linro-rebrand-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));cpSync(join(root,'scripts'),join(dir,'scripts'),{recursive:true});mkdirSync(join(dir,'apps/admin'),{recursive:true});mkdirSync(join(dir,'apps/redirect'),{recursive:true});return dir;}
 function run(dir,script,args=[]){return spawnSync(process.execPath,['scripts/'+script,...args],{cwd:dir,encoding:'utf8',timeout:15000});}
 
-test('Linro release explicitly declares AGPL-3.0-only and preserves original MIT notice',()=>{
+test('Linro release declares AGPL-3.0-only and retains its included third-party notices',()=>{
  const p=JSON.parse(read('package.json'));assert.equal(p.name,'linro');assert.equal(p.version,'1.0.1');assert.equal(p.license,'AGPL-3.0-only');
  const license=read('LICENSE');assert.ok(license.length>33000);assert.match(license,/GNU AFFERO GENERAL PUBLIC LICENSE/);assert.match(license,/13\. Remote Network Interaction/);
- assert.match(read('NOTICE'),/AGPL-3\.0-only/);assert.match(read('LICENSES/cf-links-MIT.txt'),/MIT License/);assert.match(read('LICENSES/cf-links-MIT.txt'),/cf-links contributors/);
+ assert.match(read('NOTICE'),/AGPL-3\.0-only/);
+ for(const file of ['LICENSES/TailAdmin-MIT.txt','LICENSES/Recharts-MIT.txt'])assert.match(read(file),/MIT License/);
  assert.match(read('docs/LICENSING.md'),/source_url/);assert.match(read('docs/LICENSING.md'),/对应源码/);
 });
 test('both live UI dictionaries show Linro and the expired metric uses the X path',()=>{

@@ -2,13 +2,12 @@
 
 [简体中文](LICENSING.md) · [README](../README.en-US.md)
 
-## Overall and inherited licenses
+## Project and third-party licenses
 
 Linro as a whole uses **AGPL-3.0-only**, the GNU Affero General Public License version 3, without “or any later version.” The authoritative text is [LICENSE](../LICENSE). This page explains the project; it does not replace the license or legal advice about a particular deployment.
 
 | Material | License and location |
 | --- | --- |
-| Inherited cf-links contributions | [cf-links MIT notice](../LICENSES/cf-links-MIT.txt) |
 | TailAdmin React adaptations | `apps/admin/src/web/tailadmin/` retains [TailAdmin MIT](../LICENSES/TailAdmin-MIT.txt); see [NOTICE](../NOTICE) for the fixed upstream revision |
 | Recharts | [Recharts MIT](../LICENSES/Recharts-MIT.txt) |
 | Linro as a whole and other existing files | Their AGPL-3.0-only licensing and existing file notices remain applicable |
