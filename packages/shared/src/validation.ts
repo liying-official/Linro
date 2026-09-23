@@ -1,7 +1,10 @@
 import { fail, text, integer } from './http.js';
 import type { Link } from './platform.js';
 import { DEFAULT_QUERY_KEYS, sensitiveQueryKey, sensitiveTarget } from './policy.js';
-export const RESERVED = new Set(['admin', 'api', 'linro', 'health', 'assets', 'robots', 'favicon', 'cdn-cgi', '.well-known']);
+// Reserve only namespaces used on the public redirect host. The management
+// API and GUI live on a separate host; their names are valid business slugs.
+// Dotted paths such as robots.txt are already excluded by the slug syntax.
+export const RESERVED = new Set(['health', 'cdn-cgi']);
 export function slug(value: unknown): string {
   if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(value) || RESERVED.has(value.toLowerCase()) || value.toLowerCase().startsWith('__linro_')) fail(400, 'invalid_slug', 'Slug must contain 1–64 ASCII letters, digits, _ or -, and must not be reserved.');
   return value;

@@ -38,7 +38,7 @@ test('hostnames, protocols, credentials, reserved slugs and mass assignment are 
   for (const target of ['javascript:alert(1)', 'data:text/plain,test', '//example.org', 'https://a:b@example.org/', 'https://example.org/%0d%0aX-Test:yes', 'https:\\evil.example', ' https://example.org/']) {
     assert.equal((await call(env, '/links', 'POST', { domain_id: domain.id, slug: 'bad', target_url: target })).status, 400, target);
   }
-  for (const slug of ['ADMIN', 'a/b', '你好', '%41', '..', 'x'.repeat(65)]) assert.equal((await call(env, '/links', 'POST', { domain_id: domain.id, slug, target_url: 'https://example.org/' })).status, 400, slug);
+  for (const slug of ['HEALTH', 'a/b', '你好', '%41', '..', 'x'.repeat(65)]) assert.equal((await call(env, '/links', 'POST', { domain_id: domain.id, slug, target_url: 'https://example.org/' })).status, 400, slug);
   for (const hostname of ['https://go.example.org', 'go.example.org:443', 'go.example.org.', '-a.example.org', '192.0.2.1']) assert.equal((await call(env, '/domains', 'POST', { hostname })).status, 400, hostname);
   assert.equal((await call(env, '/links', 'POST', { domain_id: domain.id, target_url: 'https://example.org/', created_by: 'attacker' })).status, 400);
 });

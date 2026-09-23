@@ -20,3 +20,5 @@ These are public protocol changes, not instructions to recreate cloud resources.
 This source contains migrations 0001–0004. Apply the pending work reported by the target database rather than inferring completeness from its version label. Retain `LINK_PASSWORD_SECRET` to continue verifying stored password records. Browser checks use a separate independent secret.
 
 Admin and Redirect publication is not atomic. Plan ordering, protocol compatibility, and a maintenance window, then separately verify the active versions, clients, assets, authentication, migrations, and dedicated acceptance links. Code rollback does not roll back the database or restore a rotated secret.
+
+Only `health`, `cdn-cgi`, and the `__Linro_` prefix are reserved on the public redirect host, ignoring case. `Linro` is a normal slug. Update Admin and Redirect together; rolling back to code that still reserves these names makes the affected short links unavailable. No new database migration is required.

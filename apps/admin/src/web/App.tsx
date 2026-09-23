@@ -238,7 +238,7 @@ const UI = {
       closeDialog: '关闭对话框',
       fieldDomain: '跳转域名',
       fieldSlug: '自定义短码',
-      fieldSlugHint: '区分大小写，避免创建形近短码；留空生成 8 位随机短码。',
+      fieldSlugHint: '区分大小写；留空生成 8 位随机短码。仅 health、cdn-cgi 及 __Linro_ 前缀保留（保留项不区分大小写）。',
       fieldSlugPlaceholder: '例如 docs，或留空',
       fieldTarget: '目标地址',
       fieldTargetHint: '仅 HTTP(S)；禁止后台或受管短域名。私有/内网目标需部署层精确白名单授权。',
@@ -513,7 +513,7 @@ const UI = {
       closeDialog: 'Close dialog',
       fieldDomain: 'Redirect domain',
       fieldSlug: 'Custom slug',
-      fieldSlugHint: 'Case-sensitive; avoid look-alike slugs. Leave empty for an 8-character random slug.',
+      fieldSlugHint: 'Case-sensitive. Leave empty for an 8-character random slug. Only health, cdn-cgi, and the __Linro_ prefix are reserved, ignoring case.',
       fieldSlugPlaceholder: 'For example docs, or leave empty',
       fieldTarget: 'Target URL',
       fieldTargetHint: 'HTTP(S) only. Admin and managed short-link hosts are prohibited. Private/local targets need an exact deployment-level exception.',
@@ -712,6 +712,7 @@ export class App extends React.Component<{ onSignOut?: () => void }, State> {
 
   message = (error: unknown): string => {
     const localized: Record<string, [string, string]> = {
+      invalid_slug: ['短码须为 1–64 个英文字母、数字、_ 或 -；health、cdn-cgi 及 __Linro_ 前缀为系统保留项。', 'Use 1–64 ASCII letters, digits, _ or -. health, cdn-cgi, and the __Linro_ prefix are reserved.'],
       invalid_block_vpn: ['VPN 拦截选项必须为明确的布尔值。', 'The VPN blocking option requires an explicit boolean.'],
       browser_check_unconfigured: ['请先在两个 Worker 设置独立的 BROWSER_CHECK_SECRET，保留原密码密钥。', 'Configure the independent BROWSER_CHECK_SECRET on both Workers first; keep the existing password secret.'],
       invalid_response_mode: ['返回方式仅支持跳转或纯文本。', 'Choose HTTP redirect or plain text.'],
