@@ -52,4 +52,4 @@ Cloudflare Workers · D1 · Access · React · TypeScript · Vite · Tailwind CS
 
 ## 📄 许可证
 
-Linro 采用 **[AGPL-3.0-only](LICENSE)**。cf-links、TailAdmin 和 Recharts 的 MIT 许可通知保留在 [LICENSES](LICENSES/) 中；第三方通知与对应源码说明见 [NOTICE](NOTICE) 和[许可说明](docs/LICENSING.md)。
+Linro 采用 **[AGPL-3.0-only](LICENSE)**。TailAdmin 和 Recharts 的 MIT 许可通知保留在 [LICENSES](LICENSES/) 中；其他版权与许可通知见 [NOTICE](NOTICE)，对应源码说明见[许可说明](docs/LICENSING.md)。

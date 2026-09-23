@@ -2,7 +2,7 @@
 
 [English](LICENSING.en-US.md) · [README](../README.md)
 
-## 整体与继承许可
+## 项目与第三方许可
 
 Linro 整体采用 **AGPL-3.0-only**：GNU Affero General Public License 第3版，不包含“或更高版本”。完整权威文本见 [LICENSE](../LICENSE)；本页是项目说明，不替代许可证或针对具体部署的法律意见。
 
@@ -10,7 +10,6 @@ Linro 整体采用 **AGPL-3.0-only**：GNU Affero General Public License 第3版
 
 | 材料 | 许可与位置 |
 | --- | --- |
-| 继承的 cf-links 贡献 | [cf-links MIT 通知](../LICENSES/cf-links-MIT.txt) |
 | TailAdmin React 适配 | `apps/admin/src/web/tailadmin/`，保留 [TailAdmin MIT](../LICENSES/TailAdmin-MIT.txt)；上游固定修订见 [NOTICE](../NOTICE) |
 | Recharts | [Recharts MIT](../LICENSES/Recharts-MIT.txt) |
 | Linro 整体及其他原有文件 | 保持其 AGPL-3.0-only 许可及现有文件通知 |

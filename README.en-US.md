@@ -52,4 +52,4 @@ Issues, feature suggestions, and pull requests are welcome. For security finding
 
 ## 📄 License
 
-Linro is licensed under **[AGPL-3.0-only](LICENSE)**. MIT notices for cf-links, TailAdmin, and Recharts are retained in [LICENSES](LICENSES/). See [NOTICE](NOTICE) and the [licensing guide](docs/LICENSING.en-US.md) for attribution and Corresponding Source information.
+Linro is licensed under **[AGPL-3.0-only](LICENSE)**. MIT notices for TailAdmin and Recharts are retained in [LICENSES](LICENSES/). Other copyright and permission notices are included in [NOTICE](NOTICE); see the [licensing guide](docs/LICENSING.en-US.md) for Corresponding Source information.

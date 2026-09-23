@@ -27,7 +27,7 @@ const REQUIRED = [
   'apps/admin/src/web/i18n.ts', 'packages/shared/src/platform.ts',
   'migrations/0003_text_responses.sql', 'packages/shared/src/text-response.ts', 'packages/shared/src/visitor-dimensions.ts', 'apps/admin/src/web/response-ui.ts', 'apps/admin/src/web/AnalyticsSelection.tsx',
   'migrations/0001_initial.sql', 'migrations/0002_link_controls.sql', 'packages/shared/src/redirect-cache.ts', 'packages/shared/src/link-password.ts', 'packages/shared/src/geo.ts', 'scripts/package-source.mjs',
-  'docs/RELEASE.md', 'docs/LICENSING.md', 'LICENSES/cf-links-MIT.txt',
+  'docs/RELEASE.md', 'docs/LICENSING.md',
   'apps/redirect/src/unlock-origin.ts', 'scripts/runtime-toolchain.mjs',
   'scripts/check-deployment.mjs', 'scripts/verify-analytics-token.mjs',
   'tests/runtime/api-canary.test.mjs', 'tests/runtime/outbound-router.mjs',

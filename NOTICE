@@ -4,17 +4,6 @@ Linro is licensed as a whole under the GNU Affero General Public License,
 version 3 only (SPDX-License-Identifier: AGPL-3.0-only), not "or later".
 See LICENSE for the unmodified license text.
 
-Modified 2026-09-18 from the supplied cf-links v1.1.2-fix source distribution:
-security-review F1/F2 hardening, Linro branding, sky-blue UI and deployment
-compatibility. See CHANGELOG.md for release notes.
-
-Original attribution retained:
-Copyright (c) 2026 cf-links contributors
-The original MIT permission and warranty notice are preserved verbatim in
-LICENSES/cf-links-MIT.txt. Retaining that notice does not offer the new Linro
-work as a whole under MIT and does not revoke rights in previously received
-MIT versions. Third-party dependencies retain their respective licenses.
-
 No project contributor identities or exclusive ownership claims are invented.
 
 This software is provided WITHOUT ANY WARRANTY. See LICENSE.
