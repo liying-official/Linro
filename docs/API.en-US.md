@@ -1,6 +1,6 @@
 # Linro v1.0.1 API Reference
 
-[简体中文](API.md) · [Complete guide](GUIDE.en-US.md) · [Permissions](GUIDE.en-US.md#permissions)
+[简体中文](https://liying-official.github.io/Linro/?lang=zh#api-reference) · [Complete guide](GUIDE.en-US.md) · [Permissions](GUIDE.en-US.md#permissions)
 
 This reference retains chapters 09–13 and 16 from the complete guide and covers 25 admin method/path combinations. Deployment and role details in the guide are part of the same version contract.
 

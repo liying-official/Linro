@@ -4,10 +4,10 @@
 
 Current version: **v1.0.1**.
 
-[简体中文](README.md) · [Deployment guide](docs/index.html?lang=en#install) · [Documentation](docs/index.html?lang=en) · [API reference](docs/index.html?lang=en#api-reference)
+[简体中文](README.md) · [Deployment guide](https://liying-official.github.io/Linro/?lang=en#install) · [Documentation](https://liying-official.github.io/Linro/?lang=en) · [API reference](https://liying-official.github.io/Linro/?lang=en#api-reference)
 
-[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](docs/index.html?lang=en#architecture)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](docs/index.html?lang=en#architecture)
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](https://liying-official.github.io/Linro/?lang=en#architecture)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://liying-official.github.io/Linro/?lang=en#architecture)
 [![License: AGPL-3.0-only](https://img.shields.io/badge/License-AGPL--3.0--only-blue)](LICENSE)
 
 Create short links on your own domains and manage links, members, and access rules from one bilingual dashboard. Linro runs in your Cloudflare account, with separate admin and public-redirect Workers and no traditional server to maintain.
@@ -24,17 +24,23 @@ Create short links on your own domains and manage links, members, and access rul
 > [!NOTE]
 > Linro supports individuals and teams sharing a workspace; it does not isolate data between members. Members with read access can view workspace links. See the [security guide](docs/SECURITY.en-US.md) for permissions and access boundaries.
 
+## 🧪 WebGUI Demo
+
+**[Open the static demo →](https://liying-official.github.io/Linro/demo/)** · Password: **`Linro`**
+
+Explore the bilingual admin UI with fictional links, domains, statistics, and role switching. Actions run in page memory, reset on refresh, and never connect to a live API. The password demonstrates the workflow; it does not protect secrets. Do not enter real information. [Demo details](docs/DEMO.en-US.md)
+
 ## 🚀 Get started
 
-**[Open the HTML deployment guide →](docs/index.html?lang=en#install)**
+**[Open the HTML deployment guide →](https://liying-official.github.io/Linro/?lang=en#install)**
 
-The bilingual HTML documentation covers first installation, Cloudflare resources, multiple domains, and optional services. For an existing instance, follow the [upgrade guide](docs/index.html?lang=en#upgrade).
+The bilingual HTML documentation covers first installation, Cloudflare resources, multiple domains, and optional services. For an existing instance, follow the [upgrade guide](https://liying-official.github.io/Linro/?lang=en#upgrade).
 
 For offline reading, download the project or documentation package and open `docs/index.html` in a browser. Language switching, search, and printing are available there.
 
 ## 📚 Documentation
 
-[Using the dashboard](docs/index.html?lang=en#usage) · [Configuration](docs/index.html?lang=en#configuration) · [Members and permissions](docs/index.html?lang=en#permissions) · [API reference](docs/index.html?lang=en#api-reference) · [Troubleshooting](docs/index.html?lang=en#troubleshooting)
+[Using the dashboard](https://liying-official.github.io/Linro/?lang=en#usage) · [Configuration](https://liying-official.github.io/Linro/?lang=en#configuration) · [Members and permissions](https://liying-official.github.io/Linro/?lang=en#permissions) · [API reference](https://liying-official.github.io/Linro/?lang=en#api-reference) · [Troubleshooting](https://liying-official.github.io/Linro/?lang=en#troubleshooting)
 
 ## 🧱 Built with
 

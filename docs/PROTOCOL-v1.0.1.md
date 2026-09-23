@@ -1,6 +1,6 @@
 # Linro v1.0.1 协议标识
 
-[English](PROTOCOL-v1.0.1.en-US.md) · [API](API.md) · [升级](GUIDE.md#upgrade)
+[English](PROTOCOL-v1.0.1.en-US.md) · [API](https://liying-official.github.io/Linro/?lang=zh#api-reference) · [升级](GUIDE.md#upgrade)
 
 | 接口或数据 | v1.0.1 标识 |
 | --- | --- |

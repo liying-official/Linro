@@ -1,6 +1,6 @@
 # Linro v1.0.1 Protocol Identifiers
 
-[简体中文](PROTOCOL-v1.0.1.md) · [API](API.en-US.md) · [Upgrade](GUIDE.en-US.md#upgrade)
+[简体中文](PROTOCOL-v1.0.1.md) · [API](https://liying-official.github.io/Linro/?lang=en#api-reference) · [Upgrade](GUIDE.en-US.md#upgrade)
 
 | Interface or data | v1.0.1 identifier |
 | --- | --- |

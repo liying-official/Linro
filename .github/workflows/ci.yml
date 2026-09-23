@@ -21,6 +21,11 @@ jobs:
       - name: Native workerd security smoke tests (no cloud credentials)
         run: npm run test:runtime
       - run: npm run build
+      - name: Rebuild the static demo and verify committed Pages assets
+        run: |
+          npm run build:demo
+          git diff --exit-code -- docs/demo
+          test -z "$(git ls-files --others --exclude-standard docs/demo)"
       - name: Real Chromium CSP navigation regression (separate from workerd)
         env:
           CFL_CHROMIUM_PATH: /usr/bin/google-chrome

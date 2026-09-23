@@ -11,7 +11,7 @@
     "build:worker": "tsc -p tsconfig.worker.json",
     "build:web": "vite build --config apps/admin/vite.config.ts",
     "build": "npm run check && npm run build:worker && npm run build:web",
-    "check": "tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "check": "tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.demo.json --noEmit",
     "test": "npm run build:worker && node --test tests/*.test.mjs",
     "configure": "node scripts/configure.mjs",
     "preflight": "node scripts/preflight.mjs",
@@ -32,7 +32,8 @@
     "toolchain:versions": "node scripts/runtime-toolchain.mjs",
     "test:runtime:canary": "node --test tests/runtime/api-canary.test.mjs",
     "verify:deployment": "node scripts/check-deployment.mjs",
-    "test:browser": "npm run build:worker && node --test --test-concurrency=1 tests/browser/csp-navigation.test.mjs"
+    "test:browser": "npm run build:worker && node --test --test-concurrency=1 tests/browser/csp-navigation.test.mjs",
+    "build:demo": "vite build --config apps/demo/vite.config.ts"
   },
   "dependencies": {
     "react": "19.3.0",

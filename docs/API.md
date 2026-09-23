@@ -1,6 +1,6 @@
 # Linro v1.0.1 API 参考
 
-[English](API.en-US.md) · [完整手册](GUIDE.md) · [权限矩阵](GUIDE.md#permissions)
+[English](https://liying-official.github.io/Linro/?lang=en#api-reference) · [完整手册](GUIDE.md) · [权限矩阵](GUIDE.md#permissions)
 
 本参考沿用完整手册第09–13及16章编号，共25个管理方法/路径组合。部署与角色章节中的细节属于同一版本契约。
 

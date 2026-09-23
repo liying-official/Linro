@@ -1,6 +1,6 @@
 # Linro v1.0.1 User and Deployment Guide
 
-[简体中文](GUIDE.md) · [README](../README.en-US.md) · [API](API.en-US.md)
+[简体中文](GUIDE.md) · [README](../README.en-US.md) · [API](https://liying-official.github.io/Linro/?lang=en#api-reference)
 
 <a id="guide"></a>
 
@@ -15,9 +15,9 @@ This manual describes deployment, configuration, permissions, and APIs for Linro
 | Deploy from scratch | [First installation](#install) → [First use](#usage) → [Production acceptance](#acceptance) |
 | Upgrade an existing instance while preserving the database and secrets | [Preserving-configuration upgrade](#upgrade); do not directly reuse the first-installation workflow |
 | Adjust domains, cache, analytics, or browser checks | [Configuration Reference](#configuration) → [Optional features](#features) |
-| Add members, assign permissions, or integrate automation | [Users and permissions](#permissions) → [API conventions](#api-conventions) |
-| Build a client program | [Data models](#models) → [Admin API](#api-reference) → [Call examples](#examples) |
-| Troubleshoot public access or maintain the database | [Public access protocol](#public-api) → [Backup and restore](#operations) → [Troubleshooting](#troubleshooting) |
+| Add members, assign permissions, or integrate automation | [Users and permissions](#permissions) → [API conventions](https://liying-official.github.io/Linro/?lang=en#api-conventions) |
+| Build a client program | [Data models](https://liying-official.github.io/Linro/?lang=en#models) → [Admin API](https://liying-official.github.io/Linro/?lang=en#api-reference) → [Call examples](#examples) |
+| Troubleshoot public access or maintain the database | [Public access protocol](https://liying-official.github.io/Linro/?lang=en#public-api) → [Backup and restore](#operations) → [Troubleshooting](#troubleshooting) |
 
 **All commands assume you are in the extracted project root.** For example, that directory contains `package.json`, `deployment.example.json`, `apps/`, `migrations/`.`admin.example.com`, `go.example.com`, all `YOUR_…`, `<…>`, example UUIDs are placeholders and must be replaced; example keys are not real credentials. Code blocks are labeled Bash or PowerShell—do not mix their line-continuation syntax. On Windows, use `curl.exe`to avoid the legacy PowerShell `curl` alias.
 

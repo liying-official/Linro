@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.web.json",
+  "compilerOptions": { "allowJs": true, "checkJs": false },
+  "include": ["apps/demo/src/**/*.tsx", "apps/demo/src/**/*.ts", "apps/demo/src/**/*.mjs"]
+}
