@@ -615,7 +615,7 @@ const localDateTime = (unix: unknown) => {
 };
 const number = (value: unknown, locale: Locale) => Math.round(Number(value) || 0).toLocaleString(locale);
 
-export class App extends React.Component<Record<string, never>, State> {
+export class App extends React.Component<{ onSignOut?: () => void }, State> {
   state: State = {
     responseMode: 'redirect', plainTextDraft: '', analyticsIds: null,
     session: null,
@@ -1054,7 +1054,7 @@ export class App extends React.Component<Record<string, never>, State> {
     ];
     return <><DashboardShell locale={this.state.locale} page={page} title={this.pageLabel(page)} workspace={session.site_name} email={String(session.user.email)} role={this.roleName(session.user.role)}
       navigation={nav.filter(item => !item.scope || this.can(item.scope)).map(item => ({ id: item.page, label: this.pageLabel(item.page), icon: <Icon name={item.icon}/>, management: ['tokens', 'users', 'audit', 'settings'].includes(item.page) }))}
-      onNavigate={target => { if (isPage(target)) void this.navigate(target); }} onSignOut={() => { sessionStorage.removeItem('cf-links-dev-token'); location.assign(session.auth_kind === 'local' ? '/' : '/cdn-cgi/access/logout'); }}
+      onNavigate={target => { if (isPage(target)) void this.navigate(target); }} onSignOut={() => { if (this.props.onSignOut) { this.props.onSignOut(); return; } sessionStorage.removeItem('cf-links-dev-token'); location.assign(session.auth_kind === 'local' ? '/' : '/cdn-cgi/access/logout'); }}
       languageSwitch={this.renderLanguageSwitch()} brandIcon={<Icon name="link" size={24}/>}><div className="page-heading"><div><div className="eyebrow">{page === 'dashboard' ? ui.eyebrow.dashboard : `${ui.eyebrow.other} / ${this.pageLabel(page).toUpperCase()}`}</div><h1>{this.pageLabel(page)}</h1><p>{this.pageDescription(page)}</p></div><div className="heading-actions"><button className="icon-button" title={ui.common.refresh} aria-label={ui.common.refresh} disabled={busy} onClick={() => void this.loadPage()}><Icon name="refresh"/></button>{(page === 'links' || page === 'dashboard') && this.can('links:write') && <button className="primary" disabled={!this.state.domains.length || busy} onClick={() => this.openModal('link')}><Icon name="plus"/>{ui.topbar.createLink}</button>}{page === 'domains' && this.can('domains:write') && <button className="primary" onClick={() => this.openModal('domain')}><Icon name="plus"/>{ui.topbar.addDomain}</button>}{page === 'users' && <button className="primary" onClick={() => this.openModal('user')}><Icon name="plus"/>{ui.topbar.addUser}</button>}{page === 'tokens' && <button className="primary" onClick={() => this.openModal('token')}><Icon name="plus"/>{ui.topbar.createToken}</button>}</div></div>
       {session.auth_kind === 'local' && <div className="local-banner">{ui.topbar.localBanner}</div>}
       {this.state.error && <div className="alert error" role="alert">{this.state.error}<button aria-label={ui.topbar.dismissError} onClick={() => this.setState({ error: '' })}>×</button></div>}

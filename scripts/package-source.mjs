@@ -9,7 +9,7 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const ROOT_FILES = [
   '.editorconfig', '.gitignore', 'CHANGELOG.md', 'LICENSE', 'NOTICE', 'README.md', 'README.en-US.md', 'docs/.nojekyll',
   'deployment.example.json', 'package.json', 'package-lock.json',
-  'tsconfig.web.json', 'tsconfig.worker.json',
+  'tsconfig.web.json', 'tsconfig.worker.json', 'tsconfig.demo.json',
 ];
 const ROOT_DIRS = ['.github', 'apps', 'packages', 'migrations', 'scripts', 'tests', 'examples', 'docs', 'LICENSES'];
 const OMIT_DIRS = new Set([
@@ -82,7 +82,8 @@ export async function stageSource({ sourceRoot = ROOT, outputDir } = {}) {
         await collect(name + '/' + child);
       }
     } else if (stat.isFile()) {
-      if (!ROOT_FILES.includes(name) && !EXTENSIONS.has(extname(name))) return;
+      const demoAsset = name.startsWith('docs/demo/assets/') && extname(name) === '.js';
+      if (!ROOT_FILES.includes(name) && !EXTENSIONS.has(extname(name)) && !demoAsset) return;
       const bytes = await readFile(full);
       entries.push({ name, bytes, hash: sha256(bytes), mode: stat.mode & 0o111 ? 0o755 : 0o644 });
     } else throw new Error(`Unsupported source entry: ${name}`);

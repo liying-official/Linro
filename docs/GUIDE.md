@@ -1,6 +1,6 @@
 # Linro v1.0.1 使用与部署手册
 
-[English](GUIDE.en-US.md) · [README](../README.md) · [API](API.md)
+[English](GUIDE.en-US.md) · [README](../README.md) · [API](https://liying-official.github.io/Linro/?lang=zh#api-reference)
 
 <a id="guide"></a>
 
@@ -15,9 +15,9 @@
 | 从零部署 | [首次安装](#install) → [首次使用](#usage) → [上线验收](#acceptance) |
 | 已有实例升级，保留数据库和 secrets | [保留配置升级](#upgrade)，不要直接套用首次安装流程 |
 | 调整域名、缓存、统计或浏览器检查 | [配置字典](#configuration) → [可选功能](#features) |
-| 添加成员、分配权限、接入自动化 | [用户与权限](#permissions) → [API 通用约定](#api-conventions) |
-| 编写调用程序 | [数据模型](#models) → [管理 API](#api-reference) → [调用示例](#examples) |
-| 排查公开访问或维护数据库 | [公开访问协议](#public-api) → [备份恢复](#operations) → [故障排查](#troubleshooting) |
+| 添加成员、分配权限、接入自动化 | [用户与权限](#permissions) → [API 通用约定](https://liying-official.github.io/Linro/?lang=zh#api-conventions) |
+| 编写调用程序 | [数据模型](https://liying-official.github.io/Linro/?lang=zh#models) → [管理 API](https://liying-official.github.io/Linro/?lang=zh#api-reference) → [调用示例](#examples) |
+| 排查公开访问或维护数据库 | [公开访问协议](https://liying-official.github.io/Linro/?lang=zh#public-api) → [备份恢复](#operations) → [故障排查](#troubleshooting) |
 
 **所有命令默认在解压后的项目根目录执行。** 例如该目录同时包含 `package.json`、`deployment.example.json`、`apps/`、`migrations/`。`admin.example.com`、`go.example.com`、所有 `YOUR_…`、`<…>`、示例 UUID 都是占位值，必须替换；示例密钥不是实际凭据。代码块标明 Bash 或 PowerShell，不要混用续行语法。Windows 下使用 `curl.exe`，避免旧版 PowerShell 的 `curl` 别名。
 

@@ -4,10 +4,10 @@
 
 当前版本：**v1.0.1**。
 
-[English](README.en-US.md) · [部署指南](docs/index.html?lang=zh#install) · [使用文档](docs/index.html?lang=zh) · [API 参考](docs/index.html?lang=zh#api-reference)
+[English](README.en-US.md) · [部署指南](https://liying-official.github.io/Linro/?lang=zh#install) · [使用文档](https://liying-official.github.io/Linro/?lang=zh) · [API 参考](https://liying-official.github.io/Linro/?lang=zh#api-reference)
 
-[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](docs/index.html?lang=zh#architecture)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](docs/index.html?lang=zh#architecture)
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](https://liying-official.github.io/Linro/?lang=zh#architecture)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://liying-official.github.io/Linro/?lang=zh#architecture)
 [![License: AGPL-3.0-only](https://img.shields.io/badge/License-AGPL--3.0--only-blue)](LICENSE)
 
 用自己的域名创建短链接，在一个中英双语后台中管理链接、成员和访问规则。Linro 运行在你的 Cloudflare 账户中，将管理后台与公开跳转分开部署，不需要维护传统服务器。
@@ -24,17 +24,23 @@
 > [!NOTE]
 > Linro 面向个人及共享工作区中的团队协作，不提供成员之间的数据隔离。有读取权限的成员可查看工作区链接；详细权限与访问边界见[安全说明](docs/SECURITY.md)。
 
+## 🧪 WebGUI Demo / 演示站点
+
+**[打开静态演示站 →](https://liying-official.github.io/Linro/demo/)** · 口令：**`Linro`**
+
+复用当前中英双语管理界面，提供虚构短链、域名、统计和角色切换。操作仅在当前页面内存中模拟，刷新即重置，不连接真实 API。口令用于演示流程，不保护秘密；请勿输入真实信息。[演示说明](docs/DEMO.md)
+
 ## 🚀 开始使用
 
-**[打开 HTML 部署指南 →](docs/index.html?lang=zh#install)**
+**[打开 HTML 部署指南 →](https://liying-official.github.io/Linro/?lang=zh#install)**
 
-首次安装、Cloudflare 资源配置、多域名接入和可选功能设置，均在双语 HTML 文档中说明。已有实例请阅读[升级指南](docs/index.html?lang=zh#upgrade)。
+首次安装、Cloudflare 资源配置、多域名接入和可选功能设置，均在双语 HTML 文档中说明。已有实例请阅读[升级指南](https://liying-official.github.io/Linro/?lang=zh#upgrade)。
 
 离线阅读：下载项目或文档包，在浏览器中打开 `docs/index.html`，即可切换语言、搜索和打印。
 
 ## 📚 文档
 
-[管理后台使用](docs/index.html?lang=zh#usage) · [配置说明](docs/index.html?lang=zh#configuration) · [成员与权限](docs/index.html?lang=zh#permissions) · [API 参考](docs/index.html?lang=zh#api-reference) · [常见问题](docs/index.html?lang=zh#troubleshooting)
+[管理后台使用](https://liying-official.github.io/Linro/?lang=zh#usage) · [配置说明](https://liying-official.github.io/Linro/?lang=zh#configuration) · [成员与权限](https://liying-official.github.io/Linro/?lang=zh#permissions) · [API 参考](https://liying-official.github.io/Linro/?lang=zh#api-reference) · [常见问题](https://liying-official.github.io/Linro/?lang=zh#troubleshooting)
 
 ## 🧱 技术栈
 
