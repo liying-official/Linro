@@ -16,7 +16,7 @@ npm run package:source
 npm run package:source -- --out /path/to/new/Linro-source
 ```
 
-脚本只使用 Node 内置模块，不安装依赖、不调用 Cloudflare、不覆盖已有输出、不删除本地开发数据。此命令是源码清单生成器，**不是编译或部署检查**；正式验收仍需 `check`、`test`、`test:runtime`、`build` 和两个 Worker 的 `deploy:dry-run`。
+脚本只使用 Node 内置模块，不安装依赖、不调用 Cloudflare、不覆盖已有输出、不删除本地开发数据。此命令是源码清单生成器，**不是编译或部署检查**；正式验收仍需 `check`、`test`、`test:runtime`、`test:browser`、`build` 和两个 Worker 的 `deploy:dry-run`。
 
 ## 收录与排除
 
@@ -24,7 +24,7 @@ npm run package:source -- --out /path/to/new/Linro-source
 
 以下生成物或私有内容不会被收录：`.build/`、`node_modules/`、`.local/`、`.wrangler/`、`dist/`（含 `apps/admin/dist/`）、`release/`、测试覆盖率/浏览器临时输出、`deployment.json`、`.dev.vars*`、`.env*`、数据库及常见私钥/备份文件。源目录中的原文件不会因此被修改。已选目录中的符号链接会被拒绝，不能经链接夹带目录外文件。
 
-`package-lock.json` 在存在且根包名/版本与当前Linro包一致时会保留。没有依赖安装结果时不能编造锁文件；用户升级应保留已有锁文件并审查差异。
+本版已提供与 `package.json` 一致的 `package-lock.json`，发布包必须包含它，安装与升级均使用该版本随包锁文件执行 `npm ci`。不要将旧版锁文件覆盖到新版，也不要手动改写锁元数据。打包器会核对锁文件根包名与版本。
 
 ## 公共模板保护
 

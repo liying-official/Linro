@@ -16,14 +16,14 @@ Linro 是 Cloudflare 原生私有短链平台：**独立 Redirect Worker + Admin
 
 新部署默认 Worker 名称为 `linro-admin`、`linro-redirect`，D1 名称为 `linro`，统计数据集为 `linro_clicks`。**品牌名称不是已有 Cloudflare 资源的自动改名操作。** 直接使用新的 Worker 名称会创建不同 Worker，原 secrets、绑定与自定义域名不会自动迁移。
 
-从旧实例升级时，保留原 `deployment.json`、数据库 ID/名称、KV ID、统计数据集、Access issuer/AUD 和两个原 secret。在自己的配置中显式填写原资源名（下面仅示范旧默认命名，应以实际控制台为准）：
+从旧实例升级时，保留原 `deployment.json`、数据库 ID/名称、KV ID、统计数据集、Access issuer/AUD 和两个原 secret。在自己的配置中显式填写原资源名（下面仅是占位示例，必须以实际控制台为准）：
 
 ```json
 {
-  "admin_worker_name": "cf-links-admin",
-  "redirect_worker_name": "cf-links-redirect",
-  "database_name": "cf-links",
-  "analytics_dataset": "cf_links_clicks"
+  "admin_worker_name": "existing-admin",
+  "redirect_worker_name": "existing-redirect",
+  "database_name": "existing-database",
+  "analytics_dataset": "existing_clicks"
 }
 ```
 
@@ -44,7 +44,7 @@ Linro 是 Cloudflare 原生私有短链平台：**独立 Redirect Worker + Admin
 
 升级时同步部署两端并更新 API 客户端；旧 API 路径、请求头和应用令牌不再受支持。Owner 通过 Access 登录后重新签发应用令牌并更新调用端；不能只替换旧令牌字符串的前缀。旧访客 Cookie 不再生效，需要重新完成密码或浏览器检查。
 
-已有数据库、短链密码哈希及其密码学用途标签、KV 缓存键、本地 Owner 身份和存储设置保持不变；无需清库、改密或重建 Cloudflare 资源。原许可归属保留。历史报告记录对应版本的行为，不代表 v1.0.1 的测试结果。
+已有数据库、短链密码哈希及其密码学用途标签、KV 缓存键、本地 Owner 身份和存储设置保持不变；无需清库、改密或重建 Cloudflare 资源。原许可归属保留。
 
 ### 开源源码入口
 
@@ -63,13 +63,13 @@ Linro 是 Cloudflare 原生私有短链平台：**独立 Redirect Worker + Admin
 <a id="security-upgrade"></a>
 ## 0. 新功能、配置、迁移与升级必读
 
-### 0.0 继承的 D3 / D4 / I3 修复与迁移纪律
+### 0.0 数据库迁移与升级纪律
 
-本版没有新增或改写迁移SQL。**不能据版本号推断目标库已经应用了哪些迁移。** 报告的生产库仅有0001/0002，因跳过中间版本，实际还须0003与0004；原基线已修复这一升级说明缺口；Linro 保留该纪律。原始0001–0004全部保留，禁止只挑本版changelog提到的文件运行。
+本版没有新增或改写迁移SQL。**不能据版本号推断目标库已经应用了哪些迁移。** 如果旧库只有0001/0002，则还须应用0003与0004。原始0001–0004全部保留，禁止只挑本版changelog提到的文件运行。
 
 1. 使用**原已配置项目目录**与真实账户/D1绑定，先执行下面的只读迁移清单检查，保存结果；不要在占位模板目录对不明数据库操作。保留生产D1备份、两个Worker版本ID、实际deployment.json、已验证的package-lock.json、原LINK_PASSWORD_SECRET和BROWSER_CHECK_SECRET。
-2. 解压本包至新目录，按第2节同步锁文件根版本；依赖版本不变，没有新增npm依赖。复制自己的配置并重新configure/preflight，确认Account ID、D1、KV、域名、Access及所有开关仍为原值。已有`browser_timezone_enabled:false`原样保留，不应因为升级而改成true；单链block_vpn继续独立生效。
-3. 完成`check → test → test:runtime → build → test:browser → deploy:dry-run`。D3的请求头保真度金丝雀与真实Chromium测试是不同检查层；缺工具或浏览器被策略阻止均为失败/受阻，不能当成跳过后通过。
+2. 解压本包至新目录，按第2节使用随包锁文件执行 `npm ci`；不要沿用旧锁文件或手动改写锁元数据。复制自己的配置并重新configure/preflight，确认Account ID、D1、KV、域名、Access及所有开关仍为原值。已有`browser_timezone_enabled:false`原样保留，不应因为升级而改成true；单链block_vpn继续独立生效。
+3. 完成`check → test → test:runtime → build → test:browser → deploy:dry-run`。请求头保真度金丝雀与真实Chromium测试是不同检查层；缺工具或浏览器被策略阻止均为失败/受阻，不能当成跳过后通过。
 4. 维护窗口内，从**新配置目录**重新核对目标库清单，应用**全部待应用迁移**，再列一次确认没有遗漏，然后更新两个Worker并探活。若确实已经完整应用0001–0004，迁移命令应报告无待应用项；无需清库或重建Owner。
 
 ```bash
@@ -84,13 +84,13 @@ npx wrangler d1 execute DB --remote --config apps/admin/wrangler.jsonc --command
 
 期望列包含response_mode、text_content、block_vpn；触发器必须同时覆盖三者，且纯计数更新不会改rule_revision。Wrangler `migrations apply`会按顺序处理待应用迁移；若迁移失败，停止后续发布，排查实际schema和迁移记录，不能以手工标记已应用或删除迁移文件求通过。[官方迁移说明](https://developers.cloudflare.com/d1/reference/migrations/) · [list/apply命令](https://developers.cloudflare.com/workers/wrangler/commands/d1/)
 
-5. 实际Chrome/Edge验证密码→环境检查→最终跨域目标、纯文本、错误时区拒绝、Cookie及额度。修复前停住的标签页应重新打开原短链。旧升级报告的 D4/F1方案仅更改采集提交的成功响应形态，密码签名、挑战/证明、限流、D1/KV权限校验和计数不变；保持CSP的`form-action 'self'`，不以放宽CSP掩盖问题。
+5. 实际Chrome/Edge验证密码→环境检查→最终跨域目标、纯文本、错误时区拒绝、Cookie及额度。修复前停住的标签页应重新打开原短链。当前浏览器流程使用同源 JSON 成功响应和普通导航，密码签名、挑战/证明、限流、D1/KV权限校验和计数不变；保持CSP的`form-action 'self'`，不以放宽CSP掩盖问题。
 
 **访客可见文案**：中文“该页面已开启浏览器环境检查，检查通过后会自动跳转。”；英文“This page has browser environment checks enabled. You will be redirected automatically once the check passes.”。标题、错误提示与noscript也不解释检测信号、比对算法或具体采集项；管理GUI的误拦警告、安全说明与站点隐私用途说明仍应保留。脚本和表单字段当然仍可被浏览器查看，通用提示不是隐藏源码或可信设备证明。
 
-### 0.0.1 浏览器时区与疑似 VPN 控制（沿用 v1.1.2）
+### 0.0.1 浏览器时区与疑似 VPN 控制
 
-**功能首次引入于v1.1.2的 `0004_browser_checks.sql`，本修复不新增SQL；升级必须按目标库清单应用全部待应用迁移，不能假设0003已完成。** 只增加 `block_vpn`（默认0）并扩展规则修订触发器，不清库、不重建Owner、不清计数、不更换密码。旧链接默认不拦截VPN；但配置生成器默认启用全局浏览器时区采集，访问流程因此变化。
+**浏览器检查使用 `0004_browser_checks.sql`；升级必须按目标库清单应用全部待应用迁移，不能假设0003已完成。** 只增加 `block_vpn`（默认0）并扩展规则修订触发器，不清库、不重建Owner、不清计数、不更换密码。旧链接默认不拦截VPN；但配置生成器默认启用全局浏览器时区采集，访问流程因此变化。
 
 > **无法保证拦截全部 VPN 用户，并且会存在错误拦截。** 浏览器时区是客户端自报，不是可信证明；IP定位不精确、旅行或手动时区会造成误拦，同一时区的代理也可能不被发现。不要把该功能当成身份认证、位置合规或唯一安全屏障。
 
@@ -123,11 +123,11 @@ JavaScript使用 `Intl.DateTimeFormat().resolvedOptions().timeZone`；IP参考�
 
 浏览器脚本是同源 `/__Linro_assets/browser.js`，无内联脚本、无eval、不加载第三方。采集页、采集POST的JSON 200、内部303、脚本/CSS都不占短链额度或成功统计。原密码POST来源修复保持；显式外站/错端口/错协议 Origin 永远拒绝，后台 Access 会话的 CSRF 严格校验没有改变。新POST也只接受精确同源或`Origin:null`配合`Sec-Fetch-Site:same-origin`；矛盾/缺失来源失败关闭。
 
-**D4/F1提交方式**：脚本只向本页同源的`form.action`发送`POST`（urlencoded challenge/timezone、`Accept: application/json`、same-origin凭据、manual重定向、no-store）。允许时服务端200 JSON只含原短链的相对next路径、无目标地址/正文，附同一签名Cookie；客户端验证next同源、同短码和单一完成标记后用`location.assign(next)`普通导航。两种响应都保留CSP、no-referrer和no-store。不带有效JSON Accept的旧表单仍303，同源验证、密码、签名、策略与拒绝分支完全共用。
+**浏览器提交方式**：脚本只向本页同源的`form.action`发送`POST`（urlencoded challenge/timezone、`Accept: application/json`、same-origin凭据、manual重定向、no-store）。允许时服务端200 JSON只含原短链的相对next路径、无目标地址/正文，附同一签名Cookie；客户端验证next同源、同短码和单一完成标记后用`location.assign(next)`普通导航。两种响应都保留CSP、no-referrer和no-store。不带有效JSON Accept的旧表单仍303，同源验证、密码、签名、策略与拒绝分支完全共用。
 
 **无JavaScript/失败回退**：开启block_vpn时必须有JavaScript、Cookie和可比较信息才能通过；缺值继续403（信息不足单列，不直接标VPN）。全局采集开启但未block时，旧表单允许缺时区并记none，但**不保证浏览器能够跟随表单链的最终跨域跳转**，不能再宣传“无JS也能正常跳转”。全局false且未block的链接仍可直接301/文本；这才是非JS客户端的兼容路径。
 
-网络故障、协议/JSON不符时，脚本最多尝试一次原表单回退；此回退仍可能被Chromium的form-action阻止，不能当作F1已完成。明确的4xx/5xx（含403/429）仅显示通用失败文本，不自动二次POST、不重复记录拒绝事件；这是比报告简化catch片段更窄的回退策略。请求等待预算10秒，不能通过重复提交/循环导航绕过保护；Cookie被禁或证明失效则回到原短链重试。生产要求HTTPS与平台IP元数据，配置缺失失败关闭。
+网络故障、协议/JSON不符时，脚本最多尝试一次原表单回退；此回退仍可能被Chromium的form-action阻止，不能当作浏览器验收通过。明确的4xx/5xx（含403/429）仅显示通用失败文本，不自动二次POST、不重复记录拒绝事件；只有明确的网络/协议异常才允许这一次回退。请求等待预算10秒，不能通过重复提交/循环导航绕过保护；Cookie被禁或证明失效则回到原短链重试。生产要求HTTPS与平台IP元数据，配置缺失失败关闭。
 
 **HEAD**：未拦截的链接保留原HEAD直接响应语义（成功占一次额度，但不记AE）；拦截开启时，无有效证明HEAD为403、无Location/正文/额度，不能通过HEAD泄露目标。手动API/curl和预览机器人不能自动执行采集页；它们可能看到200 HTML而不是旧301/纯文本，不能把HTML200当成目标内容。需要旧非浏览器兼容模式时可将全局采集设false，但单链`block_vpn`不会因此关闭。
 
@@ -138,7 +138,7 @@ JavaScript使用 `Intl.DateTimeFormat().resolvedOptions().timeZone`；IP参考�
 #### 部署和升级顺序
 
 1. 保留原数据库、有效锁文件、真实`deployment.json`和原`LINK_PASSWORD_SECRET`。先核对`migrations list --remote`，备份后应用**全部待应用迁移**（例如目标库只有0001/0002时须依次补0003/0004），不要销毁重建。第一阶段可显式设置`browser_timezone_enabled:false`，原链接`block_vpn=0`保持直接响应，避免新secret尚未配置时普遍503。
-2. 按第2节仅同步锁文件根版本（依赖版本未升级），`configure → preflight → toolchain:versions → check → test → test:runtime → build → test:browser → deploy:dry-run`。任何失败都停止。先在维护窗口迁移，再更新两个Worker；两端不是原子操作，期间不要开启新策略。
+2. 按第2节使用随包锁文件执行 `npm ci`，`configure → preflight → toolchain:versions → check → test → test:runtime → build → test:browser → deploy:dry-run`。任何失败都停止。先在维护窗口迁移，再更新两个Worker；两端不是原子操作，期间不要开启新策略。
 3. **仅首次启用且没有BROWSER_CHECK_SECRET时**，在私有终端生成一次新root并将同一值写到两端、存入密码管理器；已有实例保留两个原root，不要重新生成。
 
 ```bash
@@ -154,7 +154,7 @@ npx wrangler secret put BROWSER_CHECK_SECRET --config apps/redirect/wrangler.jso
 
 可对新POST `/__Linro_browser/*` 独立配置边缘按IP的WAF速率限制，额度应考虑正常采集请求；不把它并入严格5次/分的密码尝试桶导致正常访问误伤。保留第0.3.1节原密码WAF规则和原应用限流，任何新规则须按账户计划验证，不自动调用云端修改。
 
-**回退警告：旧v1.1.1及以前Redirect不识别block_vpn，会绕过新策略。** 已启用拦截后不得裸回退旧公开端；先维护/阻断流量并评估替代控制。0004无需为了回退而删除字段、清表或重建Owner。
+**回退警告：不识别 block_vpn 的旧代码会绕过该策略。** 已启用拦截后不得裸回退旧公开端；先维护/阻断流量并评估替代控制。0004无需为了回退而删除字段、清表或重建Owner。
 
 ### 0.0.2 纯文本短链接
 
@@ -179,7 +179,7 @@ GUI导入保持原文件2 MiB/5000条上限；按最多10条、JSON编码后256 
 | 浏览器时区与疑似VPN | 全局采集默认true；单链接block_vpn默认false | 客户端自报不可信；需新BROWSER_CHECK_SECRET；漏拦、误拦均可能 |
 | 客户端缓存 | 普通旧链接保留 `cache_ttl`；启用上述任一逐次访问控制时强制 no-store | 无法撤销客户端在升级/加密码之前已经缓存的 301/308；不要给需撤销的敏感链接提前开启缓存 |
 
-本版仍保留 v1.0.2-fix 的目标/参数/归属加固：默认 discard；merge/replace 只转发部署白名单；所有地理目标与默认目标均须通过 HTTP(S)、私网例外、后台/受管域名及敏感参数检查。Editor 与所有应用令牌仅能修改所属用户创建的链接；交互式 Owner/Admin 保留团队管理权限。团队读取仍共享，地理分流和链接密码都不是后台认证替代品。
+目标、查询参数与归属规则：默认 discard；merge/replace 只转发部署白名单；所有地理目标与默认目标均须通过 HTTP(S)、私网例外、后台/受管域名及敏感参数检查。Editor 与所有应用令牌仅能修改所属用户创建的链接；交互式 Owner/Admin 保留团队管理权限。团队读取仍共享，地理分流和链接密码都不是后台认证替代品。
 
 ### 0.2 可选 KV：按绑定自动工作
 
@@ -241,7 +241,7 @@ Wrangler `secret put` 会立即创建/部署新 Worker 版本。首次新实例�
 
 存储使用 PBKDF2-SHA256（100000 次）+ 每条随机盐 + 独立 secret HMAC pepper，并用不同用途标签签名 cookie；该参数针对目标运行时兼容性选择，不能代替强密码、pepper 保管及暴力尝试限制。原生 crypto 兼容性由 `test:runtime` 验证；**没有通过时不得删检查或降低参数来部署**。
 
-**根 secret 必须与数据库备份配套保存。** 它不在 D1 SQL 备份中；随意轮换/丢失会让现有密码校验失败，而不仅仅是 cookie 失效。正确轮换需维护窗口并给受影响链接重新设置密码，没有自动重新加密/恢复明文功能。未启用密码功能的部署可不设置此 secret。
+**根 secret 必须与数据库备份配套保存。** 它不在 D1 SQL 备份中；随意轮换/丢失会让现有密码校验失败，而不仅仅是 cookie 失效。正确轮换需维护窗口并给受影响链接重新设置密码，没有自动重新加密/恢复明文功能。未启用密码功能的部署可不设置此 secret。首次写入 secret 后刷新管理页面以重新读取会话能力，确认“设置新密码”可用。
 
 
 ### 0.3.1 密码POST的外层WAF速率限制（建议启用）
@@ -289,11 +289,11 @@ English: This link has reached its request limit. Please contact the administrat
 
 **不能保证“最终用户确实打开了目标站”的精确一次统计。** Worker 看不到用户是否收到响应、是否跟随跳转或目标站是否返回 200。若数据库已提交但网络丢失提交确认，或进程在提交后终止，可能保守地消耗一次而客户端只收到错误/未收到响应。本版不重试不确定提交、不放行未确认配额；不能通过退款计数去冒险突破上限。这里是服务器授权计数，而非终端送达证明。AE成功访问仍只记录GET，与GET+HEAD原子额度不是同一口径；另有独立VPN/未知终止拒绝事件，不计入成功访问。
 
-### 0.6 从 v1.0.2-fix 升级的执行顺序
+### 0.6 已有实例升级的执行顺序
 
 **先查看目标库的`migrations list --remote`，应用全部待应用迁移；不要根据所称版本或changelog假定前置状态。** 示例：实际只有0001/0002时补0003/0004，已有完整0001–0004时不重跑；这些是迁移记录条件，不是版本号推测。 新增内部路径保留 `__Linro_` 前缀；旧版若使用此类短码，须先运行审阅脚本处理冲突，升级后不会再公开解析它们（不自动改名）。0001 原样保留，0002 只新增字段和规则修订触发器，旧链接默认无分流/无密码/无限额，原 Owner、归属、默认302、链接目标与审计不重置。保留原库，不清库/重建 Owner/重新播种。
 
-先备份生产 D1 和私有配置，停止本项目本地开发进程及其子进程，安排双 Worker 更新维护窗口。将真实 `deployment.json`、已验证 `package-lock.json`、已有 Cloudflare secret 和整个 `.local/`（仅开发）保留；不要复制旧 dist/.build。按第 2 节只同步锁文件根版本，按第 6 节生成两端新配置，再完成全部检查：
+先备份生产 D1 和私有配置，停止本项目本地开发进程及其子进程，安排双 Worker 更新维护窗口。将真实 `deployment.json`、已验证 `package-lock.json`、已有 Cloudflare secret 和整个 `.local/`（仅开发）保留；不要复制旧 dist/.build。按第 2 节使用随包锁文件执行 `npm ci`，按第 6 节生成两端新配置，再完成全部检查：
 
 ```bash
 npm run configure
@@ -315,7 +315,7 @@ npm run deploy
 
 不要把迁移加入未加保护的自动前端构建。`deploy` **不自动创建数据库，也不自动执行迁移**，两端发布**不是原子操作**。新代码搭配旧库会失败关闭；旧 Redirect 代码不会识别新密码/配额字段，因此在两端尚未都升级完成前不得通过新 Admin 启用新功能。
 
-**启用新控制之后不能回滚到 v1.0.x Redirect**，否则旧代码会忽略密码、次数与分流。安全回退应在维护窗口保留拒绝入口，修复/重建本版；确需整体恢复旧版时按第 14 节使用匹配的旧 SQL 备份和原 secret、验证受保护链接处理方案后切换。不能只回滚 Worker 或执行 DROP COLUMN 当作无损回退。
+**启用访问控制后不能回滚到不支持相应控制的旧代码**，否则旧代码会忽略密码、次数与分流。安全回退应在维护窗口保留拒绝入口，修复/重建本版；确需整体恢复旧版时按第 14 节使用匹配的旧 SQL 备份和原 secret、验证受保护链接处理方案后切换。不能只回滚 Worker 或执行 DROP COLUMN 当作无损回退。
 
 上线至少验证：旧链接与权限不回归；两种 KV 绑定模式；陈旧 KV 后加密码/降低上限/删除不能绕过；国家、大洲、未知位置；密码错误/正确、改密撤销、HEAD 不泄露目标；受限链接的并发最后一个名额；耗尽中英提示；导入导出与双语 GUI；D1/绑定异常失败关闭。并发验证只在自己的本地或隔离验收实例进行，不能对生产做配额耗尽压力测试。`test:runtime` 的工具缺失不是跳过通过；实际云端验收仍需部署者完成。
 
@@ -429,34 +429,20 @@ Get-Content .\MANIFEST.sha256 | ForEach-Object {
 
 应在修改版本锁文件、配置或源码**之前**校验。之后这些文件的哈希变化属于预期，不要修改旧清单来冒充原包未变。
 
-### 2.2 使用已验证的 Node 与依赖
+### 2.2 使用锁定依赖安装
+
+项目要求 Node.js `>=22.16.0`，推荐使用 Node 22 LTS。源码包已经提供 `package-lock.json`，**全新安装直接执行 npm ci**，不要复制旧项目锁文件、改写锁元数据或重新解析依赖。
+
+`Wrangler 4.132.0` 精确固定，原生测试使用其捆绑的 Miniflare 5；TailAdmin UI 与 Recharts 的依赖也由同一锁文件固定。安装过程需要能访问 npm；失败时先检查网络和原生包安装错误。不要删除锁文件，不要使用 `npm update` 或 `npm audit fix --force` 作为安装步骤。
 
 ```bash
 node --version
 npm --version
-```
-
-项目声明 Node.js `>=22.16.0`；历史用户报告中实际通过的环境为 Node.js **22.23.2** / npm **10.9.8**。测试用 `node:sqlite` 的实验性警告本身不是失败。Worker 运行不依赖本地 SQLite。
-
-**保留并私下备份你本机已验证的 `package-lock.json`。** 用户只提供报告、未提供锁文件，本交付不伪造完整依赖锁。继承v1.1.0-fix按报告D1建议固定的Wrangler版本 **`4.132.0`**；选择依据为报告所核验的版本和上游包元数据，而非宣称本环境已跑通其原生测试。预期其捆绑 **Miniflare 5**，实际小版本、workerd 和 esbuild 必须由命令打印并保存，最终以你的锁文件及测试为准。
-
-复制旧锁文件后，可以先同步本项目根版本元数据（不改变任何锁定依赖）：
-
-```bash
-node -e "const fs=require('node:fs');const f='package-lock.json';const p=JSON.parse(fs.readFileSync('package.json','utf8'));const l=JSON.parse(fs.readFileSync(f,'utf8'));if(p.name!=='linro'||!['cf-links','linro'].includes(l.name)||!l.packages||!l.packages['']||!['cf-links','linro'].includes(l.packages[''].name??l.name))throw new Error('Invalid lockfile');l.name=p.name;l.version=p.version;l.packages[''].name=p.name;l.packages[''].version=p.version;fs.writeFileSync(f,JSON.stringify(l,null,2)+'\n');"
-```
-
-**上述 Node 命令不是升级 Wrangler 的命令。** 为把已有锁文件与新的精确声明对齐，在可访问 npm 的环境执行下面的定向解析，并审查锁文件差异：
-
-```bash
-npm install --save-dev --save-exact wrangler@4.132.0 --package-lock-only --ignore-scripts --no-audit --no-fund
 npm ci
 npm run toolchain:versions
 ```
 
-`--package-lock-only --ignore-scripts` 只用于更新锁的阶段；后面的 `npm ci` 应正常安装/准备工具链。确认 Wrangler 为 4.132.0，Miniflare 为 5.x，记录 workerd/esbuild 的实际版本；核对除工具链及其传递依赖外没有不期望的升级。若有意外变更或 API 缺失，停止并检查，不删除锁文件掩盖漂移。本项目加载器只解析项目的 Wrangler 依赖树，不自动安装、不回退全局 Miniflare，也不在工具缺失时跳过测试。
-
-全新安装、无有效锁文件时执行 `npm install`，保存产生的真实 `package-lock.json`，再执行 `npm run toolchain:versions`；后续使用 `npm ci`。固定 Wrangler 顶层版本不等于已经锁定整个传递依赖图；不要用 `npm update` 或 `npm audit fix --force` 作为部署步骤。
+版本打印用于核对实际 Wrangler、Miniflare、workerd 和 esbuild，不会自动改用全局工具。`node:sqlite` 的实验性警告本身不是失败；生产 Worker 不使用本机 SQLite。
 
 ### 2.3 重新构建本版
 
@@ -470,17 +456,17 @@ npm run deploy:dry-run
 
 这些命令分别执行完整前后端类型检查、Node 回归、原生 workerd 抓取、密码、KV 和 D1 配额测试、包含类型检查的完整构建和两个 Worker 的打包检查。`apps/admin/dist/index.html` 与其资源应由**本版源码**生成；不要从旧版复制 `dist/`。`.build/` 只是 Node 测试输出，Wrangler 从 TypeScript 源码打包生产 Worker。
 
-原生测试驱动按报告方案 A 使用 Wrangler 捆绑的 **Miniflare 5 `convertV4MiniflareOptions` + `outboundService`**，不再使用已移除的 `createFetchMock` / `fetchMock`。官方转换器生成 `workers: []` 配置；测试不模拟旧 undici API。所有 `dispatchFetch` 显式 `redirect: 'manual'`，保留 301/302/303/307/308 原始响应。
+原生测试驱动使用 Wrangler 捆绑的 **Miniflare 5 `convertV4MiniflareOptions` + `outboundService`**，不再使用已移除的 `createFetchMock` / `fetchMock`。官方转换器生成 `workers: []` 配置；测试不模拟旧 undici API。所有 `dispatchFetch` 显式 `redirect: 'manual'`，保留 301/302/303/307/308 原始响应。
 
-原生命令顺序为：版本打印 → **1 项 API 金丝雀** → **26 项语义用例**（继承原22项，新增4项纯文本/设备运行时用例；加金丝雀共27项定义）。出站拦截按准确 URL / 方法路由；意外出站返回 599 **并在 teardown 失败**，未消费的必要拦截也失败，没有向 fixture 目标发起真实外网请求的默认路径。金丝雀失败就不会把剩余用例运行成“一片误导性的语义失败”。测试定义数量不等于本环境执行数量；实际结果见验证报告。
+原生命令顺序为：版本打印 → API 金丝雀 → workerd 回归。出站请求由准确 URL / 方法拦截；意外出站与未消费的必要拦截都会使测试失败。测试数量以本次执行输出为准，不把旧日志数量当作当前结果。
 
-D2 的原生“浏览器形态”用例设置 `Origin: null` 和 `Sec-Fetch-Site: same-origin`，不是驱动了真实 Chrome。第 9 节仍要求真人浏览器验收；不能仅用 curl 自行填写 Origin 就认为覆盖导航提交。
+原生“浏览器形态”用例设置 `Origin: null` 和 `Sec-Fetch-Site: same-origin`，不是驱动了真实 Chrome。第 9 节仍要求真实浏览器验收；不能仅用 curl 自行填写 Origin 就认为覆盖导航提交。
 
 **`npm run build:web` 只运行 Vite，不检查 TypeScript 类型，不能代替完整的 `npm run build`。** 配置模板的 dry-run 成功也不证明填入真实账户后的部署可用；第 7 节还会再次检查。
 
-### 2.4 D3 请求头保真度与 D4 真实 Chromium 门禁
+### 2.4 真实浏览器测试
 
-`deniedOrigins`仅含两个harness均可表达的拒绝请求；`deniedOriginsNodeOnly`保留空值与空白Origin，由Node完整断言拒绝。用户报告观察到原生HTTP层丢弃这类空头；生产`unlock-origin.ts`不改写。原生金丝雀新增回显断言：空头到达时`has=false / get=null`，而字面量null、NULL和真实Origin保留；平台行为变更会明确失败，必须重审矩阵，不能静默过滤或放宽拒绝规则。
+Node 与原生 workerd 分别验证来源校验；请求头在运行时中的可观察表示不同，不能把普通 HTTP 模拟当作真实浏览器验证。
 
 真实浏览器测试是独立的第三层，不由HTTP 200/303/302断言替代：
 
@@ -488,15 +474,15 @@ D2 的原生“浏览器形态”用例设置 `Origin: null` 和 `Sec-Fetch-Site
 npm run test:browser
 ```
 
-不增加npm依赖；Node内置WebSocket驱动独立临时Chromium/Chrome/Edge配置目录。工具自动查找常见安装路径；显式指定示例：
+不增加npm依赖；Node内置WebSocket驱动独立临时Chromium/Chrome/Edge配置目录。请先确认浏览器实际安装路径。GitHub Ubuntu runner 必须显式使用其已安装的 Google Chrome，避免自动选中不能启动 CDP 的 Chromium 快照；本项目 CI 已配置该路径。Windows / PowerShell 和 Linux / Bash 示例：
 
 ```powershell
-$env:CFL_CHROMIUM_PATH = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+$env:CFL_CHROMIUM_PATH = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
 npm run test:browser
 ```
 
 ```bash
-export CFL_CHROMIUM_PATH=/usr/bin/chromium
+export CFL_CHROMIUM_PATH=/usr/bin/google-chrome
 npm run test:browser
 ```
 
@@ -573,6 +559,8 @@ npx wrangler d1 info linro
 | Identity provider | 选择你实际使用的登录方式；邮箱 OTP 或现有 IdP 按账户配置 |
 | Session duration | 按管理需求选择，例如 8 小时；这不是项目设置 |
 | Allow policy | Include → Emails → 精确填写实际管理员邮箱 |
+
+创建 Access 应用需要相应的 Zero Trust 管理权限；`wrangler login` 的 Workers 部署授权不等于 Access 应用创建权限，可在控制台单独完成本节。
 
 保存应用和允许策略。需要 MFA 时在 IdP 或 Access 侧配置并实际验证。不要使用 `Bypass`，不要用 `Everyone` 放开后台，也不要为了排错临时关闭认证。
 
@@ -653,7 +641,9 @@ test ! -e deployment.json && cp deployment.example.json deployment.json
 }
 ```
 
-以上仍是不可部署的占位模板，必须填真实值。
+以上仍是不可部署的占位模板，必须填真实值。**首次安装先将 `browser_timezone_enabled` 改为 `false`**，完成基础部署和普通跳转验证后，按第 0.0.1 节为两个 Worker 写入同一个 `BROWSER_CHECK_SECRET`，再按需启用全局采集。直接保留模板的 `true` 却未配置 secret，会使需要检查的公开链接返回 503。已有实例保留现有开关和 secrets。
+
+同一账户部署多个独立实例时，另填 `admin_worker_name`、`redirect_worker_name`，并使用独立的 D1、可选 KV 和四个限流 namespace；否则默认 Worker 名称可能指向已有实例。多短链域名的完整配置示例见 [HTML 文档 §4.7](docs/index.html#section-4-7)。
 
 | 字段 | 解释 / 校验要求 |
 |---|---|
@@ -679,6 +669,9 @@ test ! -e deployment.json && cp deployment.example.json deployment.json
 | `cloudflare_device_type_enabled` | 布尔值false（默认）/true；仅在确认平台生成并覆盖CF-Device-Type后开启；不配置时设备为none |
 | `redirect_cache_namespace_id` | 空字符串为无KV；启用填真实非全零32位小写十六进制KV namespace ID，两端自动一致绑定 |
 | `redirect_cache_ttl` | 60–86400秒，默认300；无KV绑定时不触发KV操作 |
+| `browser_timezone_enabled` | 布尔值，模板默认 `true`；首次基础安装建议 `false`，启用前配置两端浏览器检查 secret |
+| `admin_worker_name` / `redirect_worker_name` | 可选；默认 `linro-admin` / `linro-redirect`。已有实例填写实际名称；独立实例使用互不冲突的新名称 |
+| `source_url` | 可选公共 HTTPS 对应源码地址，不含凭据、查询参数或片段；不得指向本实例管理或短链域名 |
 
 没有 `default_redirect_code` 配置项：**域名默认跳转状态码在 GUI / D1 管理，不在 deployment.json 管理**。不要添加不存在的字段期望其生效。
 
@@ -796,9 +789,9 @@ Windows 原生 PowerShell 没有 `</dev/null` 语法；可交互执行同一 ope
 
 DNS 解析正常但 `no peer certificate available` 是 TLS 层线索，先看 Custom Domain/证书状态，而不是改 Worker 跳转规则。有效 TLS 下的 404/503/错误版本则检查 Worker 路由、绑定、数据库和限流。连接重置、超时或本机缺 IPv6 不足以单独证明“缺证书”。后台应另外验证真实 HTTPS + Access 登录/静态资源保护，不能移除其认证来让公开探活返回 200。
 
-用户报告 I1 是其经历解绑/重绑后的**特定实例观察**：发布（包括 `secret put`）曾伴随约 1–3 分钟证书空窗，人工重新发布后恢复。不是所有 Cloudflare 发布必然存在这个窗口，也不是本项目能保证的恢复时长。本版没有代码层“修复 Cloudflare 签证”的承诺。公开域名变更选低峰，后台与公开端分开观察；每次公开端 `secret put` 或发布后重跑探活。若平台签发持续异常，保留证据并联系平台支持。只有诊断确认且操作者接受影响时，才手动发布一次原配置并重新探测；不要循环发布以“等到绿色”，也不要例行解绑来刷新 DNS。
+Custom Domain 的 DNS 与证书可能需要时间生效。公开域名变更选低峰；每次公开端发布或 `secret put` 后重新探活。若证书持续异常，检查 Cloudflare 域名状态与 DNS，再联系平台支持。不要循环发布或例行解绑来刷新 DNS；只有诊断确认且接受影响后，才手动发布一次原配置并复查。
 
-报告另记录 Wrangler OAuth 调 `POST /accounts/{id}/workers/domains` 的 `10405` 鉴权方案错误；不把这类 API 调用加入本项目恢复自动化。使用既有 `wrangler deploy` 或控制台支持的入口，按显式域名核对，不删除其它业务记录。
+首次新建域名时，递归 DNS 可能暂存此前的 NXDOMAIN。若部署已生成 Version ID，但探活报 `ENOTFOUND`，先比较本机与公共 DNS 的解析结果，并核对 Custom Domain 已绑定；待缓存更新后仅重跑 `npm run verify:deployment`，无需重新发布或重建资源。排查时也应保留 HTTPS 主机名和证书校验。
 
 **随后进行控制台复核：**
 
@@ -907,7 +900,7 @@ curl.exe -i "https://admin.example.com/"
 
 选择专用验收短码，在 Chrome 和 Edge 中实际打开短链密码页并填写密码；不要直接 GET 解锁路径，不要用 fetch 控制台或 curl 的成功代替表单导航测试。开发者工具记录状态/请求头（分享前删除 Cookie、密码和目标 URL）：无凭据 GET 200 密码页且无目标；正确表单 POST 303 回本域短码；后续GET才返回目标3xx或文本模式200；错误密码 401；跨站或无同源证据 POST 403；非 POST 解锁路径 405 / Allow: POST；修改规则后旧 cookie 再次落回密码页。确认 Cookie 的 HttpOnly/Secure/SameSite 与密码限流仍在，内部 303 不计次数，最终 GET/HEAD 才计次数。
 
-原 `no-referrer` 页面在报告的 Chromium 请求中产生 `Origin: null`；本版对 `null + same-origin` 允许进入密码验证，但**明确外站 Origin 即便配 same-origin 仍 403**。这是修复报告布尔片段与文字边界不一致的反向用例。别修改后台 `X-Linro-CSRF` 检查来兼容公开密码表单。
+公开密码表单允许 `Origin: null` 或缺失 Origin 且 `Sec-Fetch-Site: same-origin` 的浏览器请求；显式外站/错端口/错协议 Origin 永远拒绝。后台 `X-Linro-CSRF` 检查没有改变，不采用公开表单的例外。
 
 可选的 `tests/browser/password-server.mjs` 只为隔离本机测试提供 Node+SQLite HTTP 桥接，不是生产 Worker、不是原生 workerd，也不证明生产 HTTPS/Secure-cookie 行为。不得公网暴露测试服务，不能把其生成数据导入生产；本次浏览器尝试受阻的原始记录见证据包。
 
@@ -962,7 +955,7 @@ Cron 配置传播不一定立即完成；控制台检查 Scheduled / Cron 执行
 
 ### 10.5 查询凭据轮换：先验证、后删除，绝不按列表行号
 
-报告 I2 是一次“轮转后列表重排，按旧行位置误删新 token”的操作事故，不是应用 SQL 或鉴权漏洞。固定以下顺序：
+轮换统计凭据时必须按显式 ID 确认对象，不按列表位置判断。遵循先验证、后删除的顺序：
 
 1. 私下记录旧 token 的**显式 ID**、唯一名称/创建时间、权限、使用者；新 token 使用带用途和日期的不同名称。优先新建可并行验证的替代凭据；原地轮转可能立即使旧值失效，应另安排维护窗口。
 2. 取得新值后，交互式写入 Admin `ANALYTICS_API_TOKEN`（第 10.1 节），记录发布版本。不要把值写入命令行参数、日志、报告或 Git。不要在完成验证前删除仍需要的旧凭据。
@@ -1002,9 +995,9 @@ try {
 
 **`LINK_PASSWORD_SECRET` 不适用上述日常查询 token 轮换流程。** 它是现有链接密码的 pepper 和 cookie 根密钥，数据库备份不包含它；升级必须保留原值。更换需按第 0.3 节维护并重新设置受影响链接密码，不应因清理 AE token 而误轮换它。
 
-### 10.6 报告中的非缺陷观察
+### 10.6 统计与缓存的运行边界
 
-报告指出 AE 429、同名数据集保留旧历史，以及 KV 陈旧仍受 D1 gate 保护。本版保持顺序查询及不自动重试；新增维度会增加查询数量，不删除数据集、不清KV或D1。需要重新开始统计时应人工选择新数据集名并计划迁移；不要因为新建 Worker/数据库就假定账户级统计历史也已归零。
+AE 可能返回429；同名数据集保留旧历史，KV 命中仍受最新 D1 校验保护。本版保持顺序查询及不自动重试；新增维度会增加查询数量，不删除数据集、不清KV或D1。需要重新开始统计时应人工选择新数据集名并计划迁移；不要因为新建 Worker/数据库就假定账户级统计历史也已归零。
 
 
 ### 10.7 单条/多条统计、浏览器时区与疑似VPN
@@ -1109,9 +1102,9 @@ curl --fail-with-body 'https://admin.example.com/Linro/v1/links?limit=25' \
 
 只有计划迁移的 `links` 需要导入；JSON 中的 `domains` / `settings` 元数据不会自动恢复。不要批量替换 target_url 中的域名，因为目标地址可能确实需要保留。逐条检查 `redirect_code`、参数策略、缓存与到期时间；明确保留合法的 302，而不是把全部状态码改为 301。
 
-Web 导入上限 2 MiB / 5000 行，每 10 条为一个原子批次；同名短码不覆盖，失败批次回滚，之前成功批次保留。发生网络异常先核对服务端实际已导入数量，再移除已成功行重试。用户 ID、原审计、API token、历史点击和原创建时间不是这个导入流程的恢复目标。v1.1.0 会保留地区规则与上限，但计数从0开始；password_protected 导出行必须提供新 password，拒绝静默取消保护。完整安全状态恢复使用 SQL 加原 LINK_PASSWORD_SECRET。
+Web 导入上限 2 MiB / 5000 行，每 10 条为一个原子批次；同名短码不覆盖，失败批次回滚，之前成功批次保留。发生网络异常先核对服务端实际已导入数量，再移除已成功行重试。用户 ID、原审计、API token、历史点击和原创建时间不是这个导入流程的恢复目标。当前导入会保留地区规则与上限，但计数从0开始；password_protected 导出行必须提供新 password，拒绝静默取消保护。完整安全状态恢复使用 SQL 加原 LINK_PASSWORD_SECRET。
 
-**不要把本地 Owner 的 `cf-links-local-owner` 身份绑定复制到生产。** 正式 Owner 要通过真实 Access 首次登录建立；保留旧本地数据只是为了本机继续开发或回退，不是正式身份迁移。
+**不要把本地 Owner 的开发身份绑定复制到生产。** 正式 Owner 要通过真实 Access 首次登录建立；保留旧本地数据只是为了本机继续开发或回退，不是正式身份迁移。
 
 <a id="upgrade"></a>
 ## 13. 以后升级与代码回滚
@@ -1124,11 +1117,11 @@ Web 导入上限 2 MiB / 5000 行，每 10 条为一个原子批次；同名短�
 
 先按第 0 节只读审查存量数据并备份正式 D1，再 `configure → preflight → check → test → test:runtime → test:browser → build → deploy:dry-run`。核对 `migrations list --remote`，备份并按顺序补上缺少的0002/0003/0004 migration；不重建数据库。最后 `npm run deploy`，完成第 0 / 9 节关键回归。
 
-用户报告中的本地域名 302 设置不会被配置生成或版本更新改写。线上已经建立的 301/302 等具体值以各条规则为准，不能用“版本升级”替管理员改数据。
+已有域名的 302 设置不会被配置生成或版本更新改写。线上已经建立的 301/302 等具体值以各条规则为准，不能用“版本升级”替管理员改数据。
 
 ### 13.2 回滚代码，不等于回滚数据库
 
-保存上线前两个 Worker 的 Version ID、源码、lockfile、配置和 SQL 备份。**新block_vpn启用后不能回滚到v1.1.1及更早Redirect；原密码/额度功能启用后也严禁回滚到v1.0.x Redirect**：旧代码会忽略数据库中的访问密码与次数上限。出现问题时先在维护窗口保持入口受控，优先修复/重建仍保留本版校验的版本；需要恢复旧版时必须制定受保护链接停止访问与配套旧库恢复方案。
+保存上线前两个 Worker 的 Version ID、源码、lockfile、配置和 SQL 备份。**不能回滚到不识别当前密码、额度或 block_vpn 规则的旧代码**：旧代码会忽略数据库中的访问密码与次数上限。出现问题时先在维护窗口保持入口受控，优先修复/重建仍保留本版校验的版本；需要恢复旧版时必须制定受保护链接停止访问与配套旧库恢复方案。
 
 Workers 控制台回滚、secret 变更、D1 恢复分别是不同操作，不存在跨两端 Worker/数据库/secret 的原子回退。只选择已验证、与当前控制字段和 secret 兼容的版本，随后重新验证密码、限额与权限；不要用旧 `.local/` 替代生产。不能因为前端构建失败就用 Time Travel 抹去业务数据。[官方回滚说明](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)
 
@@ -1250,7 +1243,7 @@ npm run dev:admin
 
 本地升级前停止两个父进程及其属于本项目的子进程，复制整个 `.local/` 可保留旧库和开发令牌，再运行 `local:init` 更新路径。用户现场发现 Windows 的 workerd 子进程可能继续占用端口；核对 8787/8788 对应 PID 树，不按程序名结束其他项目进程。本版不更改启动器。
 
-### 16.2 规则语义与本次加固
+### 16.2 规则语义与安全校验
 
 仅 GET/HEAD；未知/停用返回 404，到期默认 404（可显式 410），规则或配置失败返回 503，限流返回 429。默认缓存为 0，允许显式 TTL 0–3600 秒；缓存后客户端可能不再回访 Worker。短码仍 1–64 位 ASCII 字母、数字、`_`、`-`，区分大小写，不重命名历史短码；随机生成 8 位。创建时复核大小写形近码，本版未引入唯一小写索引。
 

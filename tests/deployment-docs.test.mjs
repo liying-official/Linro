@@ -1,11 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
-import { readFile, mkdtemp, writeFile, rm, access } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
 import { configs, validateConfig } from '../scripts/config-lib.mjs';
 import { SQLiteD1, setup, call, createLink, visit } from './harness.mjs';
 
@@ -14,18 +11,7 @@ const readme = await readFile(join(ROOT, 'README.md'), 'utf8');
 const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'));
 const blocks = [...readme.matchAll(/```([^\n]*)\n([\s\S]*?)```/g)];
 const commands = blocks.filter(m => /^(?:bash|powershell)$/.test(m[1])).map(m => m[2]).join('\n');
-// These tests never execute Wrangler or contact Cloudflare. Shell commands are
-// inspected; only the README's local Node lockfile transform runs in a temp dir.
-const lockCommand = commands.split('\n').find(line => line.startsWith('node -e "const fs=') && line.includes("const f='package-lock.json'"));
-const lockSource = lockCommand?.slice('node -e "'.length, -1);
-async function lockFixture(t, lock) {
-  const dir = await mkdtemp(join(tmpdir(), 'cf-links-docs-lock-'));
-  t.after(() => rm(dir, { recursive: true, force: true }));
-  await writeFile(join(dir, 'package.json'), JSON.stringify({ name: pkg.name, version: pkg.version }));
-  const bytes = JSON.stringify(lock, null, 2) + '\n';
-  await writeFile(join(dir, 'package-lock.json'), bytes);
-  return { dir, bytes };
-}
+// These tests inspect documented commands without contacting Cloudflare.
 
 test('requested fix release version and README match the shared package version', () => {
   assert.equal(pkg.version, '1.0.1'); // User-requested release name; no version-ordering logic.
@@ -102,25 +88,18 @@ test('README internal links and explicit navigation anchors resolve in the relea
 
 
 
-test('README lockfile command only aligns root metadata and preserves all locked dependency entries', async t => {
-  assert.ok(lockSource);
-  // Synthetic lock metadata tests this local transform, not npm installation.
-  const lock = { name: 'cf-links', version: '1.0.1-fix', lockfileVersion: 3, packages: {
-    '': { name: 'cf-links', version: '1.0.1-fix', dependencies: { react: '19.3.0' } },
-    'node_modules/react': { version: '19.3.0', resolved: 'https://example.test/react.tgz', integrity: 'fixture-only' },
-  } };
-  const { dir } = await lockFixture(t, lock);
-  const result = spawnSync(process.execPath, ['-e', lockSource], { cwd: dir, encoding: 'utf8' });
-  assert.equal(result.status, 0, result.stderr);
-  const expected = structuredClone(lock); expected.name = pkg.name; expected.version = pkg.version; expected.packages[''].name = pkg.name; expected.packages[''].version = pkg.version;
-  assert.deepEqual(JSON.parse(await readFile(join(dir, 'package-lock.json'), 'utf8')), expected);
+test('README installs committed dependencies without rewriting or resolving the lockfile', () => {
+  assert.match(commands, /npm ci\s*\n(?:npm run toolchain:versions)/);
+  assert.doesNotMatch(commands, /package-lock-only|npm update|npm install wrangler|writeFileSync\('package-lock/);
 });
 
-test('README lockfile command rejects an unrelated lockfile without modifying it', async t => {
-  const { dir, bytes } = await lockFixture(t, { name: 'different-project', version: '1.0.0', packages: { '': { version: '1.0.0' } } });
-  const result = spawnSync(process.execPath, ['-e', lockSource], { cwd: dir, encoding: 'utf8' });
-  assert.notEqual(result.status, 0); assert.match(result.stderr, /Invalid lockfile/);
-  assert.equal(await readFile(join(dir, 'package-lock.json'), 'utf8'), bytes);
+test('committed dependency lock matches the published package metadata and direct dependencies', async () => {
+  const lock = JSON.parse(await readFile(join(ROOT, 'package-lock.json'), 'utf8'));
+  assert.equal(lock.lockfileVersion, 3);
+  assert.equal(lock.name, pkg.name); assert.equal(lock.version, pkg.version);
+  assert.equal(lock.packages[''].name, pkg.name); assert.equal(lock.packages[''].version, pkg.version);
+  assert.deepEqual(lock.packages[''].dependencies, pkg.dependencies);
+  assert.deepEqual(lock.packages[''].devDependencies, pkg.devDependencies);
 });
 
 test('documented domain default 302 preserves existing 301 links and governs newly created links', async t => {
