@@ -37,11 +37,11 @@ async function run(args) {
   catch (error) { if (typeof error.code !== 'number') throw error; return { code: error.code, stdout: error.stdout, stderr: error.stderr }; }
 }
 
-test('README smoke command works when only the public hostname is replaced with the local endpoint', async t => {
+test('documented smoke command works when only the public hostname is replaced with the local endpoint', async t => {
   const { origin, requests } = await endpoint(t);
-  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const readme = readFileSync(new URL('../docs/GUIDE.md', import.meta.url), 'utf8');
   const command = readme.match(/^node scripts\/smoke\.mjs .+$/m)?.[0];
-  assert.ok(command, 'README must include a complete smoke command.');
+  assert.ok(command, 'Guide must include a complete smoke command.');
   const args = command.match(/"[^"\n]*"|'[^'\n]*'|\S+/g).slice(2).map(part => part.replace(/^(["'])(.*)\1$/, '$2').replace('https://go.example.com', origin));
   const result = await run(args);
   assert.equal(result.code, 0, result.stderr);

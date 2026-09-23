@@ -1,28 +1,30 @@
-# Linro 许可证与对应源码
+# Linro v1.0.1 许可证与对应源码
 
-TailAdmin React 的布局、侧栏、顶栏和卡片适配位于 `apps/admin/src/web/tailadmin/`，保留 MIT 许可；原始许可见 `LICENSES/TailAdmin-MIT.txt`，固定上游版本见 `NOTICE`。Recharts 库使用 MIT 许可，文本见 `LICENSES/Recharts-MIT.txt`。这些第三方许可不改变 Linro 其他文件及整体的 AGPL-3.0-only 许可；未引入 ApexCharts 或 TailAdmin Pro 代码。
+[English](LICENSING.en-US.md) · [README](../README.md)
 
-Linro v1.0.1 整体采用 **AGPL-3.0-only**，即 GNU Affero General Public License 第 3 版，仅此版本，不是 `-or-later`。根 `LICENSE` 为未修改的完整许可证文本；`package.json` 使用相同 SPDX 标识。标准许可证末尾的通用示例并不替代此处“仅第 3 版”的明确选择。
+## 整体与继承许可
 
-本项目保留继承源码的许可与归属。原有 MIT 版权、许可和免责声明在 `NOTICE` 与 `LICENSES/cf-links-MIT.txt` 中保留，不删除原作者归属，不把第三方依赖改成 AGPL，也不声称此前已取得的 MIT 版本权利被撤回。依赖保留各自的版权与许可；源码包包含必要的许可文本，不打包 node_modules 或外部字体。
+Linro 整体采用 **AGPL-3.0-only**：GNU Affero General Public License 第3版，不包含“或更高版本”。完整权威文本见 [LICENSE](../LICENSE)；本页是项目说明，不替代许可证或针对具体部署的法律意见。
 
-## 网络部署的源码入口
+保留的许可与归属如下：
 
-网络使用者应能方便地取得正在运行版本的对应源码，尤其是自行修改后提供网络服务的场景。请阅读 LICENSE 第 13 节，不要仅修改 package.json 就认为已经完成部署端的源码提供要求。
+| 材料 | 许可与位置 |
+| --- | --- |
+| 继承的 cf-links 贡献 | [cf-links MIT 通知](../LICENSES/cf-links-MIT.txt) |
+| TailAdmin React 适配 | `apps/admin/src/web/tailadmin/`，保留 [TailAdmin MIT](../LICENSES/TailAdmin-MIT.txt)；上游固定修订见 [NOTICE](../NOTICE) |
+| Recharts | [Recharts MIT](../LICENSES/Recharts-MIT.txt) |
+| Linro 整体及其他原有文件 | 保持其 AGPL-3.0-only 许可及现有文件通知 |
 
-在生产使用前，将与本次部署完全对应、可重新构建的源码（包括修改、构建脚本和实际依赖锁文件，但**不含账户 secret、私有数据库或访问凭据**）上传到你控制的公开源码仓库/发布页或 HTTPS 压缩包地址，填写 `deployment.json` 的 `source_url`。例如地址由你发布后取得，本项目不会编造或自动上传一个下载链接。
+这些 MIT 通知不使 Linro 整体变为 MIT，也不撤销先前合法获得的 MIT 版本权利。交付源码及锁文件未包含 ApexCharts 或 TailAdmin Pro；这不等于已经逐一审计所有传递依赖的法律义务。第三方依赖继续受各自许可约束。
 
-该配置必须为不含用户名、密码、查询参数或片段的公共 HTTPS URL，且不要指向当前后台或短链域名；不要使用短期带签名的私有下载链接。生成配置后两个 Worker 接收同一 `SOURCE_URL`：
+`LICENSE`、`NOTICE` 和 `LICENSES/*.txt` 应原样保留。双语解释不覆盖权利人的署名，不自行补造作者、版权归属或例外授权。
 
-- 管理界面页脚显示“对应源码 / Source”，并提供 AGPL-3.0-only 许可证入口。
-- 密码页及浏览器检查页显示许可证与源码入口；不会因此泄露链接目的地址、正文、密码或采集细节。
-- 两端响应附加 `Link: <...>; rel="describedby"` 对应源码指引；不代理或抓取这个地址。
+## 网络使用与 source_url
 
-配置模板默认 `source_url` 为空；应填写已实际发布的对应源码地址。预检查会明确提醒。**填写 URL 不证明地址可达、内容完整或许可义务已履行**。上线前用未登录浏览器验证链接，更新代码后同步更新源代码发布。保存本版本自定义补丁和许可证通知。仅提供补丁而不提供对应的完整源码通常不足以作为完整交付。
+AGPL 第13节涉及修改版本向通过网络交互的用户提供对应源码的要求。部署前检查适用于自身使用和分发方式的完整条款，并提供实际运行版本的完整对应源码及所需构建 / 安装材料。
 
-本说明是项目的许可标记和部署操作说明，不替代正式许可证文本或具体法律意见。它不宣称具有未提供证据的独占版权或贡献者授权。
+部署配置 `source_url` 映射到两端 `SOURCE_URL`。程序可在管理界面与公开保护页面提供源码入口，并在安全包装的响应中附加 `Link`，关系为 `describedby`。它不是自动上传、镜像或验证源码的工具。
 
-## 官方参考
+格式要求：HTTPS、最长2048字符，无 URL 凭据、查询、片段、空白和反斜线，且不使用当前管理或短链主机。公共示例留空；生产前填写实际对应版本的公开入口。`preflight` 对空值只警告，不替你确认源码已经公开、完整、可构建或符合法律要求。
 
-- SPDX 的 AGPL-3.0-only 标识与 `-or-later` 区别：https://spdx.org/licenses/AGPL-3.0-only.html
-- GNU AGPL 第 3 版：https://www.gnu.org/licenses/agpl-3.0.html
+尽量指向实际发布提交 / 标签的源码，而不是随时变化的默认分支。不要为了公开源码而泄露账户配置、用户数据、数据库、密码或私钥；保留可复现构建所需的公共模板与锁文件。法律要求有疑义时，应就具体情形寻求合格专业意见。

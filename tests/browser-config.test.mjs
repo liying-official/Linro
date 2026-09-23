@@ -24,6 +24,6 @@ test('malformed browser root in existing local file is never silently rotated',a
  const r=spawnSync(process.execPath,['scripts/local-init.mjs'],{cwd:d,encoding:'utf8'});assert.equal(r.status,1);assert.equal(await readFile(join(d,'.local','.dev.vars'),'utf8'),saved);
 });
 test('README specifies actual browser source, Cloudflare T1, unknown policy, replay boundary and safe rollout',async()=>{
- const s=await readFile(new URL('../README.md',import.meta.url),'utf8');for(const text of ['Intl.DateTimeFormat().resolvedOptions().timeZone',"request.cf.country === 'T1'",'无法保证拦截全部 VPN 用户，并且会存在错误拦截','BROWSER_CHECK_SECRET','0004_browser_checks.sql','不是服务端消费型一次性凭据','8条顺序请求','browser_timezone_enabled:false'])assert.ok(s.includes(text),text);
+ const s=await readFile(new URL('../docs/GUIDE.md',import.meta.url),'utf8');for(const text of ['Intl.DateTimeFormat().resolvedOptions().timeZone',"request.cf.country === 'T1'",'自报时区不可信','BROWSER_CHECK_SECRET','0004_browser_checks.sql','源码没有服务端一次性消费表','8条顺序请求','"browser_timezone_enabled": false'])assert.ok(s.includes(text),text);
  assert.ok(!s.includes('dimension_sources.browser_timezone: "unavailable"'));assert.ok(!s.includes('没有添加浏览器JS'));
 });

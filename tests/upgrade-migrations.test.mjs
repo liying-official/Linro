@@ -72,8 +72,8 @@ test('I3 a fully migrated database has no pending work and must not be seeded or
 });
 
 test('I3 audit steps include remote list before and after applying all pending migrations', () => {
-  const md = read('README.md');
-  const section = md.slice(md.indexOf('### 0.0 '), md.indexOf('### 0.0.1'));
+  const md = read('docs/GUIDE.md');
+  const section = md.slice(md.indexOf('### 8.1 '), md.indexOf('### 8.2 '));
   assert.match(section, /全部待应用迁移/);
   assert.match(section, /migrations list DB --remote[\s\S]*npm run db:migrate[\s\S]*migrations list DB --remote/);
   assert.match(md, /pragma_table_info\('links'\)/); assert.match(md, /type='trigger' AND name='links_rule_revision'/);

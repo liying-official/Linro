@@ -1,275 +1,934 @@
-# Linro v1.0.1 API
+# Linro v1.0.1 API 参考
 
-基础路径：`https://ADMIN_HOST/Linro/v1`。生产环境始终需要有效 Cloudflare Access assertion；自动化另外需要应用 Bearer token。部署配置、服务 token 的完整接入流程见 README 的部署与自动化接入章节。
+[English](API.en-US.md) · [完整手册](GUIDE.md) · [权限矩阵](GUIDE.md#permissions)
 
-## 响应约定
+本参考沿用完整手册第09–13及16章编号，共25个管理方法/路径组合。部署与角色章节中的细节属于同一版本契约。
 
-成功：`{"ok":true,"data":...}`。失败：`{"ok":false,"error":{"code":"...","message":"...","request_id":"..."}}`。请求 ID 同时出现在响应头，用于定位问题。JSON 字段严格校验，拒绝未知写入字段；时间统一为 Unix **秒**；对象 ID 使用 UUID；页码从 1 开始。
+<a id="api-conventions"></a>
 
-普通分页默认 25、上限 100；列表排序通常为创建时间倒序 + ID 倒序。列表不是跨请求快照，批量导出时避免并发修改。
+## 09 · API 通用约定
 
-## 路由
+<a id="section-9-1"></a>
 
-| 方法 | 路径 | 权限 / 说明 |
-|---|---|---|
-| GET | `/session` | 当前用户、scopes、site_name、source_url、版本、link_write_scope 与公开的参数/到期策略 |
-| GET | `/summary` | links:read；规则总数、有效/过期、域名数 |
-| GET | `/links` | links:read；q、domain_id、status、page、limit |
-| POST | `/links` | links:write；创建，201 |
-| GET | `/links/:id` | links:read；详情 |
-| PATCH | `/links/:id` | links:write；必须携带 version，并满足链接归属 |
-| DELETE | `/links/:id?version=N` | links:delete；并满足链接归属 |
-| POST | `/links/import` | links:write；每批 1–10 条，原子提交 |
-| POST | `/links/bulk` | 启停需 links:write；删除需 links:delete；每批 1–10 条 |
-| GET | `/domains` | domains:read；全部域名及 link_count |
-| POST | `/domains` | domains:write；创建 D1 记录，不修改 DNS |
-| PATCH | `/domains/:id` | domains:write；version；域名不可改名 |
-| DELETE | `/domains/:id?version=N` | domains:write；必须先移除该域名全部链接 |
-| GET | `/stats?days=7&link_id=UUID` | analytics:read；days 为 1–90，单选link_id或多选link_ids，最多50，不能混用 |
-| GET | `/stats/archive?page=1&limit=25` | analytics:read；D1 日归档，items，无 total；支持相同link_id/link_ids筛选，不含设备/时区明细 |
-| GET / POST | `/users` | Owner + 交互式会话；列表/创建 |
-| PATCH | `/users/:id` | Owner + 交互式会话；version；停用而非删除 |
-| GET / POST | `/tokens` | 交互式会话；仅管理本人 token |
-| DELETE | `/tokens/:id` | 交互式会话；撤销本人 token |
-| GET | `/audit` | audit:read；分页审计 |
-| GET / PATCH | `/settings` | Owner + 交互式会话；仅可写 site_name |
-| GET | `/system/health` | settings:write；D1 实查，统计仅展示配置状态 |
+### 9.1 地址、认证与浏览器调用
 
-两个 Worker 另有 `/health`：Admin 先鉴权（可能读 D1/JWKS），Redirect 为不读 D1 的公开存活接口但受 REDIRECT_LIMITER 限流。公开 Redirect Worker 的普通短码只接受 GET/HEAD，另有保留的密码解锁 POST（见下文），Admin API 路由按表列明方法；未知 API 或不支持的 API 方法返回 JSON 404，不回退成 SPA。
+管理 API 基础地址为 `https://admin.example.com/Linro/v1`。后续接口表中的路径均相对此地址。主机、大小写与路径需准确匹配；不额外加结尾 `/`。`GET /Linro/v1` 本身不是资源索引，未知接口或不支持的方法返回404 `api_not_found`。
 
-## 创建与修改链接
+| 请求头 | 使用情境 |
+| --- | --- |
+| `Accept: application/json` | 管理客户端建议始终发送；不能改变错误认证重定向为成功 JSON |
+| `Content-Type: application/json` | 带 JSON 正文的管理写请求必需，可附 `charset=utf-8` |
+| `Authorization: Bearer Linro_…` | 自动化应用令牌，必须是创建时得到的完整值 |
+| `Cf-Access-Jwt-Assertion` | 生产 Worker 要求有效 Access JWT；正常经 Access 认证后传入，不要伪造 |
+| `CF-Access-Client-Id`、`CF-Access-Client-Secret` | 自动化访问外层 Access 的凭据，与 Linro token 不同 |
+| `Origin: https://admin.example.com` | 交互式 Access 写请求必须完全匹配；正常浏览器由浏览器发送 |
+| `X-Linro-CSRF: 1` | 交互式 Access 写请求必需；读取不要求 |
+| `X-Linro-Dev` | 仅受限本地开发模式，不应加入生产调用 |
+
+Access 真人写请求还拒绝 `Sec-Fetch-Site: cross-site`。应用 token 和开发认证不是环境自动附带的 Cookie，不走同一 CSRF 检查；但 `/Linro` API 的入口仍拒绝 **显式提供且不等于 ADMIN_ORIGIN 的 Origin**，包括字符串 `null` 和空值。服务端 token 请求可省略 Origin，不能随意填写第三方网站 Origin。
+
+本版本不提供跨域开放 CORS、公共 OPTIONS 预检协议或 JSONP。外站浏览器脚本不能靠 bearer token 直接绕过同源限制。生产自动化应运行在可信服务器；只读 token 也不宜嵌入公开网页源码。
+
+浏览器带有 Authorization 时会优先进入 token 分支；错误或格式不符的 Authorization 不会退回真人 Cookie 登录。因此交互式用户管理示例中不要同时塞入应用 token。
+
+<a id="section-9-2"></a>
+
+### 9.2 成功、错误与响应头
+
+成功默认200；创建资源 / 导入成功201。管理 JSON 统一封装：
+
+```json
+{"ok":true,"data":{"deleted":true}}
+```
+
+失败示例，`request_id` 每次请求不同：
+
+```json
+{"ok":false,"error":{"code":"version_conflict","message":"This item changed. Refresh before saving again.","request_id":"example-request-id"}}
+```
+
+`data` 可以是对象、数组或接口定义的结构，不能假设全部有 `items`。错误正文 `message` 为源码中的英文说明，程序应依据 HTTP 状态和 `error.code` 判断。所有经过 Worker 安全包装的响应都有 `X-Request-Id`；提交故障时带上该值，而非 token 或密码。
+
+管理 API 使用 `Cache-Control: no-store`。安全包装还设置 CSP、nosniff、拒绝嵌入、Referrer-Policy 等；HTTPS 响应设置 HSTS。应用限流429带 `Retry-After: 60`。被外层 Access / 平台提前处理的响应可能是302或 HTML，未必包含 Linro JSON / 请求 ID，应先检查状态和 Content-Type。
+
+<a id="section-9-3"></a>
+
+### 9.3 正文、分页、时间与并发
+
+管理 JSON 正文上限 **262,144字节**，以实际流式读取字节数为准，不信任伪造的 Content-Length；根值须是对象，不允许数组、null 或损坏 UTF-8。JSON 字段按具体接口校验，普通写对象会拒绝未声明字段。批量请求不要超过单次条数 / 字节限制。
+
+数值应传 JSON 数字，不是字符串。布尔配置业务字段通常接受 `true / false / 1 / 0`，但 `reset_redirect_count` 只接受布尔值。字符串限制主要按 JavaScript 字符串长度计；另有明确 UTF-8 字节限制的密码、文本与正文须同时满足。
+
+时间字段 `created_at`、`updated_at`、`expires_at`、`revoked_at` 都是 Unix **秒**，不是毫秒；导出包 `exported_at` 是 ISO 字符串，归档 `date` 是 UTC 日历日期。`null` 含义随字段变化，例如链接永不过期、没有次数上限或撤销密码，不能统一解释为“不修改”。
+
+分页 `page` 默认1、范围1–100000；`limit` 默认25、范围1–100。链接与审计返回 `total`；归档没有 `total`；域名、用户、令牌和设置直接返回数组，不使用这套分页。
+
+链接、域名、用户的 PATCH 要传当前 `version`；链接 / 域名 DELETE 用 `?version=…`。读到的版本过旧返回409，删除不存在资源通常404。令牌撤销不需要 version；设置修改没有 version，采用最后写入生效。公开成功次数更新不等同于后台编辑版本更新，`rule_revision` 用于访客保护凭据与路由规则的独立失效控制。
+
+没有 Idempotency-Key 实现。POST 超时可能已提交，不能盲目重试；应按业务 slug / ID 查询并核对。分页不是快照，跨请求读写没有自动跨资源事务。
+
+<a id="section-9-4"></a>
+
+### 9.4 HEAD 与健康路径
+
+管理路由匹配明确的 HTTP 方法。虽然最外层会去掉 HEAD 正文，**`HEAD /Linro/v1/links` 并不自动等价 GET**，会404。Admin 的独立 `/health` 支持 GET / HEAD 且需要认证；Owner 的 `/Linro/v1/system/health` 是 GET 并查询 D1；公开 Redirect `/health` 是另一端的浅健康。三者不要混用。
+
+**依据：** `apps/admin/src/worker/index.ts`；`auth.ts`；`api.ts`；`packages/shared/src/http.ts`。
+
+<a id="models"></a>
+
+## 10 · 数据模型与字段规则
+
+<a id="section-10-1"></a>
+
+### 10.1 Link 写入字段
+
+POST `/links` 与 `/links/import` 的每个条目共支持下列16个业务字段；PATCH `/links/:id` 支持这些字段，再加 `version` 与 `reset_redirect_count`。标为“创建必需”的字段在 PATCH 时可省略以保留当前值。
+
+| 字段 | 类型 / 约束 | 创建默认与更新语义 |
+| --- | --- | --- |
+| `domain_id` | 字符串，最多36字符；须对应现有域名 ID | 创建必需；允许选择已停用域名，但其链接不会公开可用 |
+| `slug` | 1–64位 ASCII 字母、数字、`_`、`-` | 创建省略或空串时自动生成8位；更新不能用空串重新随机 |
+| `target_url` | 有效 HTTP / HTTPS URL，最多4096字符 | redirect 模式创建必需；text 模式不用此目标 |
+| `title` | 字符串，最多200字符 | 默认空串；PATCH 省略保留 |
+| `description` | 字符串，最多2000字符 | 默认空串；允许正常多行文本 |
+| `redirect_code` | 数字 `301 / 302 / 307 / 308` | 创建默认采用所选域名的 default_redirect_code；更新省略保留 |
+| `query_mode` | `discard / merge / replace` | 默认 discard；text 模式强制 discard |
+| `enabled` | 布尔或数字0 / 1 | 默认1；API 输出为数字 |
+| `expires_at` | Unix秒整数1–253402300799，或 null | 默认 null；源码允许过去时间，此时会表现为过期 |
+| `cache_ttl` | 整数0–3600，秒 | 默认0；这是公开客户端缓存，不是 KV TTL |
+| `geo_rules` | 数组，0–32条；序列化长度最多65536字符 | 默认空数组；PATCH 省略保留，传 `[]` 清空 |
+| `password` | null 或12–128字符且最多512 UTF-8字节的字符串 | 省略：创建无密码 / 更新保留；null：移除；字符串：重新设定 |
+| `max_redirects` | null 或整数1–1000000000 | null 为无限；更改上限不会重置 redirect_count |
+| `response_mode` | `redirect / text` | 默认 redirect；切换模式须同时满足目标 / 文本 / 地区规则约束 |
+| `text_content` | 非空字符串，最多16384字符、32768 UTF-8字节 | text 模式必需；redirect 模式归一化为空串 |
+| `block_vpn` | 布尔或数字0 / 1 | 默认0；从未启用变为启用须已配置浏览器检查根 secret |
+
+PATCH 额外字段：`version` 为当前正整数版本；`reset_redirect_count` 为布尔值，true 才清零，省略 / false 不清零。客户端应只发送希望修改的字段，避免把 null 当作通用的“保持不变”。
+
+URL 校验拒绝非法控制字符、反斜杠、用户名 / 密码、非 HTTP(S) scheme 等；还须通过管理主机 / 已管理短链主机环路与私有目标策略检查。允许的目标不是“服务端已经实际请求验证成功”的保证，源码不抓取目标网页，也不执行 DNS 解析来证明域名绝不解析到私网。
+
+slug 禁用保留字，比较保留字时不区分大小写：`admin`、`api`、`linro`、`health`、`assets`、`robots`、`favicon`、`cdn-cgi`、`.well-known`，以及 `__linro_` 前缀；其中含点的值本身也不符合普通 slug 字符规则。有效业务 slug 的唯一约束区分大小写。
+
+密码不会 trim，因此前后空格属于密码内容；不要在日志或 URL 查询参数中传密码。根 secret 未配置或格式不正确时，新增 / 重设密码会失败，不会存明文回退。文本允许 TAB / CR / LF，但拒绝其他受限控制字符和不合法的 Unicode 往返值；不作为 HTML 渲染。
+
+<a id="section-10-2"></a>
+
+### 10.2 GeoRule
+
+```json
+[
+  {"kind":"country","code":"JP","target_url":"https://www.example.org/ja/"},
+  {"kind":"continent","code":"EU","target_url":"https://www.example.org/eu/"}
+]
+```
+
+每项只允许 `kind`、`code`、`target_url`。`kind` 是 country 或 continent；code 大写两字母。continent 固定为 `AF / AN / AS / EU / NA / OC / SA`，country 校验大写形式并拒绝 `XX`，不是完整 ISO 国家列表的查表校验；不要提交不存在的国家代码。相同 `kind:code` 不能重复。匹配优先级国家 → 大洲 → 默认 target_url，与用户提交数组中的国家 / 大洲先后无关。
+
+<a id="section-10-3"></a>
+
+### 10.3 PublicLink 读取对象
+
+API 里的“PublicLink”指经过脱敏的管理接口对象，不代表可以匿名读取。它包含上述业务配置，但 **不包含 `password` 或 `password_hash`**，另包含：
+
+| 字段 | 含义 |
+| --- | --- |
+| `id` | 链接 UUID |
+| `hostname`、`short_url` | 域名及短链地址；生产 short_url 为 HTTPS |
+| `password_protected` | 布尔值，是否存在密码保护 |
+| `created_by` | 创建者用户 UUID，历史记录可能 null |
+| `created_at`、`updated_at` | Unix秒 |
+| `version` | 后台编辑乐观锁版本 |
+| `rule_revision` | 链接规则修订号；用于缓存 / 访客证明失效，不作为 PATCH version 替代品 |
+| `redirect_count` | 有次数上限时成功业务请求的受控计数；不是总点击统计 |
+| `remaining_redirects` | 无限时 null，否则 `max(0, max_redirects - redirect_count)` |
+| `domain_enabled` | 链接列表查询附带的域名状态；其他读取响应不保证带此字段 |
+
+`enabled`、`block_vpn` 为0 / 1；`geo_rules` 已解析为数组，而不是数据库中的 JSON 字符串。text 模式的 API `target_url` 是空串；数据库内部兼容用的 `about:blank` 不用于跳转或对外抓取。
+
+以下为 **结构示例，不是实际线上记录**；后续文档统一用 domain / link / user / token 四种示例 ID：
 
 ```json
 {
-  "domain_id": "实际域名UUID",
-  "slug": "docs",
-  "target_url": "https://example.org/docs?a=1",
-  "title": "项目文档",
-  "description": "备注",
-  "redirect_code": 301,
-  "query_mode": "discard",
-  "enabled": true,
-  "expires_at": null,
-  "cache_ttl": 0
+  "id":"22222222-2222-4222-8222-222222222222",
+  "domain_id":"11111111-1111-4111-8111-111111111111",
+  "hostname":"go.example.com",
+  "slug":"welcome",
+  "short_url":"https://go.example.com/welcome",
+  "target_url":"https://www.example.org/start",
+  "title":"欢迎页",
+  "description":"部署验收示例",
+  "redirect_code":302,
+  "query_mode":"discard",
+  "enabled":1,
+  "expires_at":null,
+  "cache_ttl":0,
+  "geo_rules":[],
+  "password_protected":false,
+  "max_redirects":null,
+  "redirect_count":0,
+  "remaining_redirects":null,
+  "response_mode":"redirect",
+  "text_content":"",
+  "block_vpn":0,
+  "created_by":"33333333-3333-4333-8333-333333333333",
+  "created_at":1789776000,
+  "updated_at":1789776000,
+  "version":1,
+  "rule_revision":1
 }
 ```
 
-redirect模式的`domain_id` 和 `target_url` 必须提供；text模式则需要domain_id和text_content，不需要target_url；slug 为空或省略时自动生成。未指定状态码采用域名默认值。title ≤200、description ≤2000、URL ≤4096、slug ≤64；URL 必须是显式 http/https，无 credentials/control characters。后台/受管短域名禁止作为目标；私有/本地目标默认拒绝，仅部署者的精确主机例外可允许。写入与有效跳转两处复检，不能用直接改库绕过；不解析 DNS。
+<a id="section-10-4"></a>
 
-PATCH 提供需要修改的字段及当前 `version`，例如：
+### 10.4 Domain、User、Token、Setting 与 Audit
 
-```json
-{"version":1,"target_url":"https://example.org/updated","enabled":true}
-```
+| 模型 | API 字段与特殊含义 |
+| --- | --- |
+| Domain | `id, hostname, name, enabled, default_redirect_code, created_at, updated_at, version`；GET 列表另加 `link_count`。hostname 创建后不能 PATCH |
+| User | `id, email, display_name, role, enabled, created_at, updated_at, version`；不会返回 `access_sub`；email 创建后不能 PATCH |
+| Token 列表项 | `id, name, prefix, scopes, expires_at, revoked_at, created_at`；**scopes 为数据库 JSON 字符串**，如 `"[\"links:read\"]"`，需 JSON.parse |
+| Token 创建结果 | `id, token, name, scopes, expires_at, shown_once`；这里 **scopes 是数组**，完整 token 仅返回这一次 |
+| Setting | `key, value, updated_at`；GET 返回所有设置，包括可能存在的归档游标；只有 `site_name` 能通过 PATCH 修改 |
+| Audit | `id, user_id, actor_email, action, resource_type, resource_id, details, request_id, created_at`；**details 为 JSON 字符串**，不是直接嵌套对象 |
+| DailyStat | `link_id, date, clicks, updated_at`，列表额外带 `slug, hostname`；clicks 为采样加权值，允许非整数 |
 
-服务器更新后 version 加 1。过期版本返回 409；不要自动覆盖，先重新读取并处理冲突。DELETE 同样必须提供 `?version=N`。响应中有 `short_url`、hostname、created_at、updated_at、version 等。
+站点名1–80字符且不能仅空白；域名显示名最多100字符可空；用户显示名最多100字符可空；token 名1–100字符且不能仅空白。用户 role 必须小写 `viewer / editor / admin / owner`。源码 token 表没有 `last_used_at` 字段，也没有相应更新接口，不应从历史材料中的通用描述推导出此功能。
 
-**Query**：discard 忽略传入；merge/replace 仅传入部署允许的精确参数名（默认五个 utm_*）。merge 仍目标同名键优先；replace 会清空旧 query，即便来访过滤后为空。敏感键禁止配置；可识别的认证/登录/重置/令牌/跳转参数目标必须 discard，否则写入返回 400 unsafe_query_mode；旧同类目标在公开读路径直接采用 discard，数据库不自动改写。**缓存**：cache_ttl=0 为 no-store，非零是 private 客户端缓存，最大 3600 秒，且不能超过到期时间剩余长度。有地区规则、密码、次数上限或浏览器检查流程时强制 no-store，忽略非零客户端 TTL。
+审计保存创建、编辑、删除、启停、导入、token 撤销等行为；敏感 URL 的 query / fragment 会脱敏，文本只记录长度，密码只记录是否保护。读取审计不是读取密码或恢复正文的渠道，也不应假设它是平台完整访问日志。
 
-## 列表查询
+**依据：** `packages/shared/src/platform.ts`；`http.ts`；`validation.ts`；`geo.ts`；`text-response.ts`；`apps/admin/src/worker/data.ts`；`api.ts`；四份 D1 迁移。
 
-```text
-GET /links?q=docs&domain_id=UUID&status=active&page=1&limit=25
-```
+<a id="api-reference"></a>
 
-status 支持 `all`、`active`、`disabled`、`expired`、`exhausted`（已达上限）；active 会排除耗尽记录。搜索匹配 slug、title、target_url；长度最多 120。LIKE 特殊字符被转义，不作为通配符注入。
+## 11 · 管理 API 完整参考
 
-```json
-{"ok":true,"data":{"items":[],"total":0,"page":1,"limit":25}}
-```
+本章按源码列出 **25个“方法 + 路径”组合**。所有响应均套用第09章 JSON envelope；以下 `data` 结构不重复写外层。`L` 表示 PublicLink，`D` 表示 Domain，`U` 表示 User。`{id}` 必须替换为实际 UUID，不能带花括号。
 
-## 批量与导入
+<a id="section-11-1"></a>
 
-```json
-{"links":[{"domain_id":"UUID","slug":"a","target_url":"https://example.org/a"}]}
-```
+### 11.1 GET /session — 当前会话
 
-`/links/import` 一个请求全部成功或回滚，成功为201并返回 imported、ids。多个请求之间不是一个大事务；网络超时不代表服务器一定没提交，先查询去重。
+**权限：** 任意已认证会话，包括应用 token；无额外 scope。无参数。
 
-```json
-{"action":"disable","items":[{"id":"UUID","version":2}]}
-```
-
-`/links/bulk` 的 action 为 enable/disable/delete。每项有独立事务，响应 `results:[{id,ok,conflict?,forbidden?}]` 可出现部分成功。跨归属项目标 forbidden:true；版本冲突和已不存在项目标 conflict:true。拒绝项不记录成功审计；客户端需要逐项核对，不要只看 HTTP200。
-
-## 域名、用户、设置
-
-创建域名：`{hostname,name?,enabled?,default_redirect_code?}`；修改：`{version,name?,enabled?,default_redirect_code?}`。已有链接引用的域名不可删除。hostname 不能等于生产后台域名，也不能将现有链接默认目标或任一地区目标的主机新增为短链域名。
-
-创建用户：`{email,display_name?,role?}`；默认viewer。修改：`{version,display_name?,role?,enabled?}`。邮箱创建后不可修改；首次验证后绑定 Access subject。身份提供商迁移导致 subject 改变时，需由数据库维护者在完成身份核实和备份后重置该用户绑定；不提供公开自助重绑。
-
-设置：`PATCH /settings` 接收 `{site_name:"团队名称"}`，长度1–80。其它配置通过部署文件或 secret 管理。
-
-## 应用令牌
-
-创建：
-
-```json
-{"name":"automation","scopes":["links:read","links:write"],"expires_at":实际未来Unix秒}
-```
-
-上方时间占位符需替换为整数；最早为当前时间60秒之后，最迟为365天之后。权限候选为 links:read、links:write、links:delete、domains:read、analytics:read，且不得超过当前角色权限。没有 users/settings/admin token scope。
-
-返回 `data.token` 只显示一次，过后只能撤销再生成。非撤销 token 数软限制50（并发创建不承诺严格配额）；到期但未撤销的 token 也计入此限制。令牌不能调用 `/tokens` 创建更多令牌，也不能管理其他用户。
-
-## 统计
-
-`/stats` 未配置时返回 HTTP200、`available:false`、reason；上游授权/查询失败则返回502。成功包含 available、sampled、timezone、days、clicks、timeline、top、countries、referrers。
-
-这里的 clicks 是最终授权GET跳转或纯文本200响应的采样加权估算，不是去机器人后的真实点击或精确 UV。`/stats/archive` 是 D1 持久化日聚合，删除链接会级联移除该链接归档。
-
-## 常用错误
-
-400 参数错误；401 缺少/失效凭据；403 角色、scope、CSRF 或身份未授权；409 唯一键/版本/最后Owner等冲突；413 请求体过大；421 错误管理域名；429 限流；502 统计上游错误；503 数据库/签名公钥或必要绑定不可用。
-
-客户端应显示错误 message 与 request_id。对 GET 可进行有限退避重试；创建、导入、批量写入未实现客户端 idempotency-key，重试前查询确认。
-
-## 链接归属与响应边界
-
-交互式 Owner/Admin 的 link_write_scope 为 workspace；Editor、Viewer 以及**所有应用 token**为 owned，但仍必须先满足具体操作 scope。owned 的更新、删除和批量操作必须满足 link.created_by == principal.user.id；不是 token_id。同一用户的多个 token 共享归属，建议 CI 使用独立 Editor。读取仍遵循团队共享模型，并非用户隐私隔离。created_by 为 null 的行只允许交互式 Owner/Admin 治理。客户端不得在创建/导入/更新中指定 created_by。
-
-/session 新增示例（原有字段保留）：
-
-```json
-{"link_write_scope":"owned","security":{"queryKeys":["utm_source","utm_medium","utm_campaign","utm_term","utm_content"],"expiredStatus":404}}
-```
-
-不会将 private target 例外主机列表加入此会话响应。界面据 session 和 created_by 限制操作入口，最终仍由后端独立判断。
-
-| 响应 | 意义 |
-|---|---|
-| 403 link_owner_required | 当前写入主体不拥有该链接（交互式管理员例外） |
-| 400 unsafe_query_mode | 可识别的敏感目标必须 discard |
-| 400 private_target | 私有/本地目标未被部署例外允许 |
-| 400 internal_target / redirect_chain | 不得指向后台或受管短域名 |
-| 503 security_policy_invalid | 部署策略无效，需修正配置，不是用户可覆盖的输入 |
-| 公开 429 + Retry-After: 60 | D1 查询前位置级限流；HEAD 无 body，无 Location |
-| 公开 503 + Retry-After: 5 | 缺必要绑定、限流异常、目标违规或数据库异常，不进行成功跳转 |
-
-到期默认公开 404（显式 EXPIRED_LINK_STATUS=410 可保留旧 410），默认 no-store 不变。未知/停用/过期不会自动跳首页。通过配置扩大查询白名单或私有例外是部署权限，不是应用 API scope；现有 settings PATCH 仍只允许 site_name。
-
-
-## 可选缓存、地区分流、密码与次数上限
-
-`/session` 的 `features` 增加 `redirect_cache`（binding 是否存在）、`cache_consistency: "d1-guarded"`、`passwords_configured`（Admin secret 格式是否已配置）；它们不是对 KV/D1 连通性或两端 secret 一致性的线上探测。前端没有设置 namespace/secret 的 API；这些只由部署者通过配置管理。
-
-### 新建/更新字段
+**200 data：** `user: U`、`scopes: string[]`、`source_url: string`、`auth_kind: access|token|local`、`site_name: string`、`analytics_configured: boolean`、`link_write_scope: owned|workspace`、`version: "1.0.1"`，以及：
 
 ```json
 {
-  "domain_id": "实际域名UUID",
-  "slug": "regional",
-  "target_url": "https://example.org/global",
-  "geo_rules": [
-    {"kind":"country","code":"JP","target_url":"https://example.org/japan"},
-    {"kind":"continent","code":"AS","target_url":"https://example.org/asia"}
-  ],
-  "max_redirects": 100,
-  "query_mode": "discard",
-  "cache_ttl": 0
+  "features":{
+    "browser_timezone_collection_enabled":false,
+    "browser_checks_configured":true,
+    "redirect_cache":false,
+    "cache_consistency":"d1-guarded",
+    "passwords_configured":true,
+    "text_responses":true,
+    "device_header_enabled":false
+  },
+  "security":{
+    "queryKeys":["utm_source","utm_medium","utm_campaign","utm_term","utm_content"],
+    "expiredStatus":404
+  }
 }
 ```
 
-| 字段 | 写入语义 |
-|---|---|
-| `geo_rules` | 数组，0–32条，kind为country/continent，code两位大写，同kind/code不可重复；每个target_url通过与默认目标相同的验证。省略保留，空数组清除 |
-| `password` | 新建省略/null为无密码；PATCH省略保留，null明确移除，字符串设置新密码；12–128字符，不trim，无控制字符；两端必须配置同一LINK_PASSWORD_SECRET |
-| `max_redirects` | null无限制或1–1000000000整数；省略保留；0/负数/小数拒绝。已有已用次数不随编辑或改变上限清零 |
-| `reset_redirect_count` | **仅PATCH**，boolean，true在同一次受版本/归属控制的更新中清零，并记录审计；省略/false不重置 |
-| `version` | PATCH既有乐观锁，不能省略；设置密码/规则/限额仍受原scope和created_by限制 |
+这是字段结构示例，开关以实际配置为准。session 不返回私有目标白名单、Access 凭据、根 secret 或 token 明文；site_name 用于显示工作空间名称。
 
-不可写 `password_hash`、`password_protected`、`redirect_count`、`remaining_redirects`、`rule_revision` 或 `created_by`。原 schema migration 0001不变，0002新增字段与修订触发器。
+<a id="section-11-2"></a>
 
-### 读取与导出
+### 11.2 GET /summary — 总览计数
 
-链接列表/详情新增：geo_rules数组、password_protected布尔、max_redirects、redirect_count、remaining_redirects（无限制null，否则不小于0）、rule_revision。**从不返回password/password_hash**。原id/version/目标URL等字段仍存在，团队读权限不会隐藏目标URL，因此链接密码不是用来隔离已授权后台成员的秘密。
+**权限：** `links:read`。无参数。
 
-Web JSON/CSV保留非秘密控制信息；导入时不恢复counter/readonly标志，也不接受verifier。GUI读取protected标志后，若没有新password会拒绝导入以避免降级；脚本调用者也必须做这项检查并转换为上述可写字段。公开API本身不接受原样整行导出对象。SQL备份可以保留校验串/计数/修订，恢复密码还必须使用原根secret。
+**200 data 示例：** `{"links":6,"active":5,"expired":1,"domains":2}`。读取整个共享工作区。active 同时要求链接与域名启用、未过期、未耗尽；expired 独立按过期时间计数，不保证与 disabled 等互斥。
 
-### 公开访问协议
+<a id="section-11-3"></a>
 
-- 普通GET/HEAD从request.cf选择国家优先、大洲其次、默认最后；每次最新D1状态授权，KV命中不能跳过。地理规则不是认证，也不使用访客自填的country头。
-- 受密码保护且无有效cookie：200 HTML挑战，无Location；HEAD没有body，仍无目标Location。页面使用自源CSS，不执行脚本。
-- `POST /__Linro_unlock/<slug>`：来源判断按下文公开解锁来源规则，拒绝显式外站与矛盾metadata；Content-Type须为application/x-www-form-urlencoded且只包含单个password字段，实际body上限8192字节；错误密码401、限流429、依赖失败503。
-- 正确密码：303至本站`/<slug>`并设置15分钟HttpOnly/Secure/SameSite=Lax cookie；这次不计入quota/AE。下一次GET才返回设定的目标状态码，POSTbody永不转发目标。
-- 受限的最终GET与HEAD，各次返回目标Location前原子增加1；重复HEAD/GET都是不同请求。无上限时不写该counter，原AE仍仅统计GET。
-- 耗尽：403纯文本，`Content-Language`，no-store，无Location。中文“此链接请求次数已到达上限，请联系管理员”，英文“This link has reached its request limit. Please contact the administrator.”；HEAD无body。Accept-Language或`_Linro_lang`决定UI语言，内部语言参数不透传。
-- `/__Linro_assets/password.css`为密码页自源样式，所有`__Linro_`前缀短码保留。普通短码仍拒绝任意POST/PUT等方法。
+### 11.3 GET /links — 列出链接
 
-单次D1条件UPDATE解决并发最后一个名额竞争，但不能证明客户端收到/访问目标；提交确认丢失时可能保守占用一格，不自动重试/退款或绕过上限。因限额开启而增加的D1写入与KV查询单独消耗资源；只把它称为服务器授权计数。
+**权限：** `links:read`。
 
-### 新增错误与运维约束
+| 查询参数 | 规则 |
+| --- | --- |
+| `page`、`limit` | 通用分页，默认1 / 25，limit最多100 |
+| `q` | 可选，最多120字符；匹配 slug、title、target_url，不搜索 text_content / description |
+| `domain_id` | 可选域名 ID，按该域名过滤 |
+| `status` | `all / active / disabled / expired / exhausted`；省略等价不筛选 |
 
-400 `invalid_geo_rules` / `duplicate_geo_rule`：规则形状、地区码、重复或长度不合要求；400 `invalid_link_password`：密码格式不符；503 `link_password_unconfigured`：Admin缺secret；target/query安全错误继续适用于所有地理目标。公开端D1/KV异常不会泄露密码或使用旧password_protected布尔值来放行。
+**200 data：** `{"items":[L],"total":6,"page":1,"limit":25}`，按 created_at 降序、id 降序。不存在的 domain_id 过滤通常得到空列表，不自动触发资源404。错误：400 `search_too_long / invalid_status / invalid_field`；权限不足403。
 
-所有写入先提交D1和审计，再尽力维护KV；缓存维护失败不意味着业务事务回滚。KV不是备份，也不是调用次数来源。密码计算/解锁cookie不依赖KV里是否带密码标志。
+```http
+GET /Linro/v1/links?status=active&limit=25&page=1&q=welcome
+```
 
+<a id="section-11-4"></a>
 
-## 公开解锁来源规则
+### 11.4 POST /links — 创建链接
 
-管理 API 字段、权限、计数语义及迁移不变。公开 `/__Linro_unlock/<slug>` 的非POST方法统一405，`Allow: POST`；HEAD无body。POST的Origin:null/缺失仅在严格同源Fetch Metadata下进入密码验证，显式外站Origin不论Metadata都403；正确Origin可兼容无Metadata客户端，但不得带矛盾的site值。后台CSRF不接受这个例外。
-
-来源403为纯文本“请从短链密码页提交。”或“Please submit the form from the short link password page.”；沿用Accept-Language及_Linro_lang选择机制、no-store，无Location/Set-Cookie。错误密码仍401，正确密码内部303不计额度。不存在、停用或已耗尽的链接继续遵循原先查询/访问控制顺序，不利用错误提示泄露目标。
-
-
-## 纯文本与精确链接选择
-
-### 纯文本写入及读取
+**权限：** `links:write`。正文为第10章 Link 写入字段。
 
 ```json
-{"domain_id":"实际域名UUID","slug":"notice","response_mode":"text","text_content":"第一行\nSecond line","query_mode":"discard","max_redirects":100}
+{
+  "domain_id":"11111111-1111-4111-8111-111111111111",
+  "slug":"welcome",
+  "target_url":"https://www.example.org/start",
+  "title":"欢迎页",
+  "redirect_code":302,
+  "query_mode":"discard",
+  "cache_ttl":0,
+  "block_vpn":false
+}
 ```
 
-新增可写字段response_mode（redirect/text，默认redirect）、text_content。正文限制1–16384 UTF-16代码单元/最多32768 UTF-8字节，无控制字符（TAB/CR/LF除外）。text模式不要求target_url、强制discard，不能携带非空geo_rules；修改旧分流链接须显式传geo_rules:[]。回到redirect模式必须提供通过原安全校验的target_url；text_content清除。纯文本无条件no-store，cache_ttl不用于缓存正文。
+**201 data：** 完整 L。created_by 自动设为当前用户；省略 slug 时自动短码遇唯一性冲突最多尝试5轮。显式 slug 冲突返回409 `conflict`，不擅自换短码。参数违规400；所选域名不存在400 `domain_not_found`；保护根 secret 未配置时503。写入与成功审计在同一 D1 batch 中提交；KV 更新不是成功写入的授权条件。
 
-为保留原非空target_url数据库约束，text行内部使用非HTTP哨兵about:blank；API读取时target_url为空字符串。该哨兵不是可访问目标，不进入Location也不fetch。既有Link.id/version/归属规则不变，rule_revision随模式/正文变化递增，旧密码cookie失效。公共GET返回200 text/plain; charset=utf-8、nosniff，无Location；HEAD同状态/头但空body。密码/限额/启停/过期继续检查；最终成功GET/HEAD各扣一次配额，只有GET记AE。
+<a id="section-11-5"></a>
 
-JSON/CSV导出包含response_mode/text_content，正文是敏感业务数据；审计仅记录模式和正文长度，不记录正文。KV不缓存正文或text行。导入接受可写字段，不能把带readonly控制字段的整行直接POST；密码保护导出仍必须提供新密码，不能静默降级。
+### 11.5 GET /links/{id} — 读取单条链接
 
-### 统计筛选
+**权限：** `links:read`。无正文；**200 data：** L。不存在404 `not_found`。后台所有已授权读取者可见该对象，不因 created_by 不同隐藏记录；密码验证器不返回。
 
-```text
-GET /Linro/v1/stats?days=7
-GET /Linro/v1/stats?days=7&link_id=11111111-1111-4111-8111-111111111111
-GET /Linro/v1/stats?days=30&link_ids=11111111-1111-4111-8111-111111111111,22222222-2222-4222-8222-222222222222
-GET /Linro/v1/stats/archive?link_ids=11111111-1111-4111-8111-111111111111&page=1&limit=25
+<a id="section-11-6"></a>
+
+### 11.6 PATCH /links/{id} — 更新链接
+
+**权限：** `links:write`，同时符合链接所有权规则。正文必需 version，其余字段部分更新。
+
+```json
+{"version":1,"target_url":"https://www.example.org/new","title":"新版入口","cache_ttl":0}
 ```
 
-UUID为示意值，必须换成真实存在的link.id，而不是slug或domain.id。无选择参数为全部；link_id为旧兼容单选，link_ids为逗号分隔1–50个小写规范UUID。两者不能混用，同名参数不能重复；不允许空值、尾逗号、任意SQL字符；重复UUID去重，但输入长度仍受50上限。任意选中ID不存在/已删除→404 stats_link_not_found，不自动忽略，更不会回退成全部。无效输入→400 invalid_link_id。所有路由仍要求analytics:read与正常Access/API认证；保留团队共享读取，不按创建者过滤。
+清零计数示例：`{"version":2,"reset_redirect_count":true}`。删除密码示例：`{"version":3,"password":null}`。以上版本仅示意，应分别先读取当前值，不是固定顺序操作脚本。
 
-新增结果字段：link_ids（null表示全部）、timezones:[{timezone,clicks}]、devices:[{device,clicks}]、dimension_sources、success_scope。device只为mobile/pc/none；缺失旧记录聚合进none。timezones分布为JavaScript自报浏览器时区；ip_timezones独立保留Cloudflare IP参考。顶层timezone:'UTC'仍为趋势分组时区。dimension_sources.browser_timezone='javascript_client_reported_untrusted'，旧浏览器未采集记录归none。success_scope='authorized_get_redirect_or_text'，不统计密码页/内部303/HEAD/失败；不是精确去重用户。
+**200 data：** 更新后的 L。不存在返回 404；版本冲突返回 409 version_conflict；不满足链接归属限制返回 403 link_owner_required；非法字段返回 400。修改域名或 slug 时先提交 D1，再尽力清理旧 KV 路由；这不是跨 D1/KV 的原子事务，旧 KV 命中仍须通过最新 D1 校验。已经缓存或正在传输的响应无法立即撤回。
 
-/stats/archive使用相同链接选择、参数化D1查询；只包含已有daily_stats日总量，dimension_detail_available:false，不生成不存在的历史时区/设备数据。AE为8条顺序查询、sample-weighted sum，无自动重试429；任意维度失败即整个查询明确失败，不能显示部分结果冒充完整筛选。
+<a id="section-11-7"></a>
 
-/session.features新增text_responses:true和device_header_enabled布尔值。设备开关由部署配置管理，不接受普通GUI或用户scope直接变更平台信任来源。
+### 11.7 DELETE /links/{id} — 删除链接
 
-新增错误：400 invalid_response_mode、invalid_text_content、text_geo_conflict、invalid_link_id；404 stats_link_not_found。500/503等仍不得展示正文或密码作为诊断信息。
+**权限：** `links:delete` + 所有权约束。查询必需 `version`；无 JSON 正文。
 
-GUI 导入按单批最多10行且完整JSON UTF-8编码不超过262144字节分批。HTTP API仍严格执行该请求体字节上限，直接调用者同样需要分批；已有成功批次不会因后续失败回滚。
+```http
+DELETE /Linro/v1/links/22222222-2222-4222-8222-222222222222?version=1
+```
 
-## 浏览器检查与 VPN 统计
+**200 data：** `{"deleted":true}`。不存在404，版本冲突409，跨所有者403。D1 daily_stats 随链接外键级联删除；AE 已写出的历史事件不由本路由清除，不能把删除链接理解成所有存储的历史数据立即消失。
 
-Links创建/PATCH/导入支持block_vpn（JSON boolean或0/1；禁止字符串、null及未知类型）。未指定时新建默认0、PATCH保留旧值。启用新策略需要BROWSER_CHECK_SECRET；缺失返回503 browser_check_unconfigured，而非悄悄公开。读取/JSON/CSV包含此非秘密标志；日志记录flag，不记录浏览器证明或root。Editor/API令牌归属限制不变。直接SQL更新该flag也通过0004触发器更新rule_revision，不改计数。
+<a id="section-11-8"></a>
 
-/session.features新增browser_timezone_collection_enabled、browser_checks_configured，仅返回布尔，不返回secret。部署JSON新增browser_timezone_enabled默认true，两端变量必须同值；不能通过管理API写root。
+### 11.8 POST /links/import — 原子小批量导入
 
-公开POST /__Linro_browser/:slug仅接受同源浏览器表单challenge/timezone，每次实际读取上限4096B、严格两字段。非POST405。正确表单签名/当前D1规则通过后，若block_vpn=true且时区不匹配/Tor或时区不可验证则403（未知另列）。允许时，显式`Accept: application/json`（有效q>0）返回200 JSON `{"ok":true,"data":{"next":"/<slug>?_Linro_check=1"}}`及原签名HttpOnly证明Cookie，JSON无Location、无目标/正文；其它客户端保持303回同一短链。两种响应均有`Vary: Accept`和no-store，验证与拒绝路径完全共用，证明仍不超过原120秒；最终GET重新检查再返回业务结果。完成参数_Linro_check不是凭据，必须有配套有效Cookie，且内部参数不透传给目标。该端点不是后台Bearer API，访问密码仍先独立验证。
+**权限：** `links:write`。顶层只允许 `links`，数组1–10项，每项采用创建字段，不接收导出对象中的只读字段。
 
-统计新增ip_timezones与suspected_vpn_visits、suspected_vpn_successes、blocked_vpn_visits、unknown_timezone_blocks、unknown_timezone_successes、tor_visits。VPN计数含最终成功GET与策略终止拒绝请求（含合法挑战POST的拒绝），不含中间200/303，不去重为人数。vpn_scope=terminal_successes_and_policy_denials_not_unique_users；Tor是request.cf.country=T1；浏览器/IP时区规范化后身份不一致为疑似。缺值unknown不标VPN，但开启block时安全拒绝。
+```json
+{
+  "links":[
+    {"domain_id":"11111111-1111-4111-8111-111111111111","slug":"intro","target_url":"https://www.example.org/intro","redirect_code":302},
+    {"domain_id":"11111111-1111-4111-8111-111111111111","slug":"notice","response_mode":"text","text_content":"维护已完成。","geo_rules":[]}
+  ]
+}
+```
 
-原clicks/成功趋势/国家/来源/设备及每日归档只算double1>0的成功GET；新拒绝double1=0。每个新统计字段遵循同一link_id/link_ids范围。旧事件缺新字段，不回填猜测VPN/浏览器时区；旧日归档不增加不存在的历史维度。详细blob/double位置、拒绝码和部署顺序见README0.0/10.7。
+**201 data：** `{"imported":2,"ids":["22222222-2222-4222-8222-222222222222","55555555-5555-4555-8555-555555555555"]}`。先归一化所有条目，再事务提交本次 batch；任一验证或唯一性冲突使本请求不部分导入。错误400 `invalid_import` / 字段错误、409冲突、413超限。此路由不是 CSV 文件上传接口，不接受 multipart 或 JSON 外层 `domains/settings`。
 
-### 浏览器提交与成功响应
+<a id="section-11-9"></a>
 
-JSON是**成功响应协商**，不是新增请求体格式：仍为application/x-www-form-urlencoded，仅challenge/timezone两个字段。application/json请求体仍415；非法来源、签名、规则、密码与策略均拒绝且无Set-Cookie。Accept不参与权限判断。密码解锁接口仍使用原303，不改后台API CSRF。
+### 11.9 POST /links/bulk — 部分成功批量启停 / 删除
 
-JSON 200与旧303均不扣quota、不记录成功访问；随后脚本校验next为同源同短码的相对路径，使用location.assign普通导航。不得将JSON响应的200误认为最终文本200，统计位置和double布局不变。旧表单回退可能仍受CSP阻止；只适合作兼容路径，不保证无JS浏览器能完成最终跨域跳转。公开页及拒绝提示改为通用环境检查文案，详细采集与判定边界仍见README与SECURITY。
+**权限：** action 为 enable / disable 时 `links:write`；delete 时 `links:delete`。每项仍检查所有权。正文顶层仅 action、items；items为1–10个含 id 与 version 的对象，不能重复 ID。
 
+```json
+{"action":"disable","items":[{"id":"22222222-2222-4222-8222-222222222222","version":1}]}
+```
 
-## Linro v1.0.1 品牌与来源保护
+**200 data 示例：** `{"results":[{"id":"22222222-2222-4222-8222-222222222222","ok":false,"conflict":true}]}`。成功项 `ok:true`；跨所有者失败附 `forbidden:true`；不存在或版本变更通常附 `conflict:true`。200只代表批量请求正常完成，不代表全部项目成功。非法动作、空数组、重复 ID 等在执行前400；逐项成功没有统一事务回滚。
 
-JSON 导出 format 为 `linro`。v1.0.1 使用 `/Linro/v1`、`Linro_` 应用令牌、`X-Linro-*` 请求头、`/__Linro_*` 内部路径与 `_Linro_*` 查询参数；旧协议不再受支持，客户端需要同步升级并重新签发令牌。
+<a id="section-11-10"></a>
 
-`GET /session` 增加 `source_url`（由部署配置的公共 HTTPS 地址验证后返回，未配置时为空）；旧默认工作空间名仅显示映射为 Linro，用户自定义名不改库。
+### 11.10 GET /domains — 域名列表
 
-所有 `/Linro`、`/Linro/*` 若含显式非同源 Origin（含 null/空串）则在鉴权前 403 `cross_origin`。同源/无 Origin 仍适用原鉴权与 CSRF，不开放 CORS。两端 HTTPS 返回一年 HSTS（includeSubDomains，无 preload）；HEAD 无正文但保留安全响应头。公开 health 版本变为 1.0.1，仍属于只供运维的存活信号，不替代数据库或 Access 健康检查。
+**权限：** `domains:read`。无分页 / 正文；**200 data：** `D[]`，按 hostname 排序，每项附 `link_count`。包含停用域名。不存在单独的 `GET /domains/{id}`，需要从列表查找。
+
+<a id="section-11-11"></a>
+
+### 11.11 POST /domains — 新建域名记录
+
+**权限：** `domains:write`，当前角色集合仅交互式 Admin / Owner 能满足。
+
+```json
+{"hostname":"go.example.com","name":"官方短链","enabled":true,"default_redirect_code":302}
+```
+
+仅允许 hostname、name、enabled、default_redirect_code。hostname 必需且通过主机名校验，name默认空、enabled默认1、跳转码默认301。**201 data：** D，不保证附 link_count。
+
+域名重复409 `conflict`；管理主机400 `admin_hostname`；如果现有链接的默认或地区目标已指向准备加入的主机，返回409 `hostname_is_destination`，应先迁移到最终目标，避免形成受管理短链环路。成功只创建 D1 记录，不创建 Cloudflare 资源。
+
+<a id="section-11-12"></a>
+
+### 11.12 PATCH /domains/{id} — 更新域名记录
+
+**权限：** `domains:write`。仅允许 version、name、enabled、default_redirect_code。
+
+```json
+{"version":1,"name":"公共入口","enabled":true,"default_redirect_code":302}
+```
+
+**200 data：** 更新后的 D。hostname 不可修改；传入会400 `unknown_field`。404不存在、409版本冲突。停用域名影响其下全部链接；更改默认跳转码不会重写现有链接。
+
+<a id="section-11-13"></a>
+
+### 11.13 DELETE /domains/{id} — 删除域名记录
+
+**权限：** `domains:write`。必需查询 `version`；**200 data：** `{"deleted":true}`。仍有链接引用时409 `in_use`，不是自动级联删除。先显式移动 / 删除链接再删除域名。该操作不自动解除平台 Custom Domain / DNS。
+
+<a id="section-11-14"></a>
+
+### 11.14 GET /stats — Analytics Engine 实时查询
+
+**权限：** `analytics:read`。
+
+| 查询参数 | 规则 |
+| --- | --- |
+| `days` | 默认7，整数1–90；查询最近相应天数的时间窗口，输出以 UTC 表示 |
+| `link_id` | 单个小写标准 UUID；可省略 |
+| `link_ids` | 逗号分隔1–50个小写标准 UUID；与 link_id 互斥 |
+
+link_id 或 link_ids 各自不允许重复出现，且两者不能同时使用；选择参数不能传空串、空列表或尾部逗号。days 按首个值解析，并未实施重复参数拒绝；调用端仍应只传一次。50项限制在去重前检查，之后去重。两个 ID 参数均省略表示整个工作区。显式选择有任一链接不存在，404 `stats_link_not_found`；不会静默扩大到全部链接，即使统计未配置也先核验选择范围。
+
+未配置时 **200 data**：
+
+```json
+{"available":false,"reason":"Analytics Engine is disabled or the Analytics Read secret is not configured.","sampled":true,"link_ids":null}
+```
+
+配置完整且查询成功时 data 包含：
+
+| 字段 | 结构 / 解释 |
+| --- | --- |
+| `available, sampled, timezone, days, link_ids` | true、true、UTC、窗口天数、null或实际选择数组 |
+| `clicks` | 成功业务 GET 的采样加权总数，不是 UV |
+| `timeline` | `[{date, clicks}]`，按日期；没有事件的日期不承诺补零 |
+| `top` | `[{link_id, hostname, slug, clicks}]`，最多50条 |
+| `countries` | `[{country, clicks}]`，最多20项 |
+| `referrers` | `[{referrer, clicks}]`，最多20项，仅来源主机维度 |
+| `timezones` | `[{timezone, clicks}]`，浏览器自报时区，缺失归为 none |
+| `ip_timezones` | `[{timezone, clicks}]`，Cloudflare IP 地理时区 |
+| `devices` | `[{device, clicks}]`，device 为 mobile / pc / none |
+| `suspected_vpn_visits`、`suspected_vpn_successes` | 疑似事件与其中成功访问估计 |
+| `blocked_vpn_visits`、`unknown_timezone_blocks` | VPN策略拒绝与未知时区拒绝估计 |
+| `unknown_timezone_successes`、`tor_visits` | 未知时区成功与 Tor 相关事件估计 |
+| `vpn_scope` | `terminal_successes_and_policy_denials_not_unique_users` |
+| `success_scope` | `authorized_get_redirect_or_text` |
+| `dimension_sources` | 见下方来源字段，不代表浏览器自报内容可信 |
+
+```json
+{
+  "dimension_sources":{
+    "timezone":"javascript_client_reported",
+    "ip_timezone":"cloudflare_ip_geolocation",
+    "device":"cloudflare_generated_header",
+    "browser_timezone":"javascript_client_reported_untrusted",
+    "tor":"cloudflare_request_cf_country_T1",
+    "device_header_enabled":false
+  }
+}
+```
+
+上游非成功 HTTP 状态、无合法 data 数组或非法计数映射502 `analytics_query_failed`；网络 / 超时或 JSON 解码异常可能进入通用500，不能把所有失败都标为“未配置”。不自动重试八个查询。
+
+<a id="section-11-15"></a>
+
+### 11.15 GET /stats/archive — D1 日归档
+
+**权限：** `analytics:read`。支持 page、limit 和与 /stats 相同的 link_id / link_ids；**不实现 days 日期筛选**。
+
+**200 data：** `{"items":[DailyStat],"sampled":true,"page":1,"limit":25,"link_ids":null,"dimension_detail_available":false}`。没有 total；按 date 降序、link_id 排序。只含已写入 D1 且链接仍存在的日计数，不含国家、设备、时区或 VPN 历史维度，也不是 /stats 的自动透明备用数据源。AE关闭后仍可读取已有归档。
+
+<a id="section-11-16"></a>
+
+### 11.16 GET /users — 用户列表
+
+**权限：** `users:write` + 交互式会话，即 Owner。无分页；**200 data：** `U[]`，按 created_at。没有 GET /users/{id}。应用 token 无权调用，即使属于 Owner。
+
+<a id="section-11-17"></a>
+
+### 11.17 POST /users — 创建用户
+
+**权限：** Owner 交互式会话。
+
+```json
+{"email":"editor@example.com","display_name":"内容维护","role":"editor"}
+```
+
+仅 email 必需；display_name 默认空，role 默认 viewer，新用户默认启用。不能传 enabled、access_sub、version、id。**201 data：** U。邮箱重复409；非法角色400 `invalid_role`。此操作不发送邮件、不创建 Access 策略，成员还需满足外层认证条件。
+
+<a id="section-11-18"></a>
+
+### 11.18 PATCH /users/{id} — 修改 / 停用用户
+
+**权限：** Owner 交互式会话。仅允许 version、display_name、role、enabled。
+
+```json
+{"version":1,"role":"viewer","enabled":false}
+```
+
+**200 data：** 更新后的 U。不能修改 email 或 access_sub。不允许停用或降级最后一个启用的 Owner，返回 409 last_owner；版本冲突返回 409 version_conflict；用户不存在返回 404。没有 DELETE 用户路由。停用用户会阻止该用户及其令牌的后续认证，但不会自动删除其公开链接。
+
+<a id="section-11-19"></a>
+
+### 11.19 GET /tokens — 本人令牌列表
+
+**权限：** 任意交互式会话，限本人；不要求某个额外 scope。无分页。**200 data：** Token 列表项数组，按 created_at 降序，包含已撤销记录。
+
+```json
+[{
+  "id":"44444444-4444-4444-8444-444444444444",
+  "name":"只读巡检",
+  "prefix":"Linro_ABCDEF",
+  "scopes":"[\"links:read\",\"domains:read\"]",
+  "expires_at":1792368000,
+  "revoked_at":null,
+  "created_at":1789776000
+}]
+```
+
+prefix 仅为展示前缀，不能用作完整 token。这里 scopes 为 JSON 字符串；不返回 token_hash、完整 token、其他用户 ID 或最后使用时间。
+
+<a id="section-11-20"></a>
+
+### 11.20 POST /tokens — 创建本人应用令牌
+
+**权限：** 交互式会话；scopes 必须属于当前角色可授予的五种非管理权限。
+
+```json
+{"name":"只读巡检","scopes":["links:read","domains:read"],"expires_at":1792368000}
+```
+
+示例 expires_at 仅用于展示，实际调用应动态取 `Math.floor(Date.now()/1000) + 30*86400` 等合规未来时间；服务端要求创建时起至少60秒、至多365天，超界返回400 invalid_field。scopes 原数组长度1–5，非法项 / 越权项403 `invalid_scopes`，合法重复项去重。name 不能为空白；已有50条或更多未撤销记录时，继续创建返回409 `token_limit`。
+
+**201 data：** `id, token, name, scopes: string[], expires_at, shown_once: true`。立即安全保存完整 token，不写 URL、公开页面或日志。创建完成后再次 GET 列表无法找回它，只能撤销并创建新 token。
+
+<a id="section-11-21"></a>
+
+### 11.21 DELETE /tokens/{id} — 撤销本人令牌
+
+**权限：** 交互式会话，且 token 属于本人。无 version、无正文。**200 data：** `{"revoked":true}`。已撤销 / 不存在 / 其他人的 token 都返回404 `not_found`；不是可无限重复取得200的幂等响应设计。token 不能调用此接口撤销自身。
+
+<a id="section-11-22"></a>
+
+### 11.22 GET /audit — 审计列表
+
+**权限：** `audit:read`，即交互式 Admin / Owner。支持 page、limit；不实现 user_id、action 或日期服务端筛选。
+
+**200 data：** `{"items":[Audit],"total":100,"page":1,"limit":25}`，按 created_at 降序、id 降序。details 是 JSON 字符串，需显式解析；日志细节已有脱敏，不能用于恢复密码、完整 URL 秘密参数或纯文本正文。
+
+<a id="section-11-23"></a>
+
+### 11.23 GET /settings — 全部设置
+
+**权限：** `settings:write` + 交互式会话，即 Owner。无分页；**200 data：** Setting 数组，按 key 排序。可能包括 `analytics_rollup_…` 内部记录，不要将全部 GET 结果原样 PATCH 回去。
+
+<a id="section-11-24"></a>
+
+### 11.24 PATCH /settings — 修改站点名
+
+**权限：** Owner 交互式会话。只接受 `site_name`：
+
+```json
+{"site_name":"Linro team links"}
+```
+
+**200 data：** `{"site_name":"Linro team links"}`。长度1–80字符且非纯空白；无 version，并发更新最后写入生效。不能用此接口修改 Access、KV、analytics_enabled、时区开关、根 secrets 或 Cloudflare 资源。
+
+<a id="section-11-25"></a>
+
+### 11.25 GET /system/health — Worker 与 D1 健康
+
+**权限：** `settings:write`，实际可用者为 Owner。无参数。执行 D1 `SELECT 1` 后：
+
+```json
+{"worker":"ok","database":"ok","analytics":"configured_not_probed","version":"1.0.1"}
+```
+
+未配置统计时 analytics 为 `disabled_or_incomplete`。**configured_not_probed 不是 AE SQL 实测成功。** D1异常不会返回上述成功对象；未经映射的异常进入500 `internal_error`。这个接口不是公开探针。
+
+**依据：** 本章逐项对应 `apps/admin/src/worker/api.ts`；字段转换在 `data.ts`；所有权 / scope 在 `auth.ts`；统计结构在 `analytics.ts`。未列出的 PUT、用户删除、域名单独读取、token刷新、手动归档、所有权转移、API批量导出等功能不应假设存在。
+
+<a id="public-api"></a>
+
+## 12 · 公开跳转、密码与浏览器检查协议
+
+<a id="section-12-1"></a>
+
+### 12.1 路由一览
+
+以下路径位于 **Redirect Worker 的短链域名**，不带 `/Linro/v1`。它们不是后台管理接口，不使用应用 token 作为短链解锁凭据。
+
+| 方法 | 路径 | 正常结果与用途 |
+| --- | --- | --- |
+| GET / HEAD | `/` | 200纯文本品牌提示，不列出链接，也不自动跳到后台 |
+| GET / HEAD | `/health` | 200裸 JSON `{"status":"ok","version":"1.0.1"}`；不查 D1 |
+| GET / HEAD | `/robots.txt` | 200文本 `User-agent: *`、`Disallow: /`；不是访问控制 |
+| GET / HEAD | `/__Linro_assets/password.css` | 密码 / 检查页面样式，no-store |
+| GET / HEAD | `/__Linro_assets/browser.js` | 浏览器检查脚本，no-store |
+| GET / HEAD | `/{slug}` | 根据保护流程返回页面、跳转、文本或拒绝 |
+| POST | `/__Linro_unlock/{slug}` | 同源密码表单；成功303回同一短码 |
+| POST | `/__Linro_browser/{slug}` | 同源浏览器检查表单；成功200 JSON或303回同一短码 |
+
+内部 POST 路径使用其他方法时405、`Allow: POST`，即使短码不存在也先统一处理，不以数据库查询泄露状态。其他路径不支持 POST / PUT / DELETE，返回405、`Allow: GET, HEAD`。路径大小写有意义；旧品牌内部路径不作为兼容别名保留。
+
+公开 REDIRECT_LIMITER 在 health、资源与业务查询前运行；缺少生产限流绑定或其执行异常可返回503。因此公开 health200只证明该端浅层处理与版本，不证明域名已登记到 D1、目标可用、AE可查或密码流程正常。
+
+<a id="section-12-2"></a>
+
+### 12.2 普通链接与 HEAD
+
+有效跳转链接最终返回配置的301 / 302 / 307 / 308及 Location；有效文本链接最终返回200、`text/plain; charset=utf-8`，无目标 Location。未找到、链接或域名停用返回404；过期按 `EXPIRED_LINK_STATUS` 返回404或410；次数耗尽403，无目标。
+
+保护顺序概要：方法检查 → 外层 Worker 限流 → 最新链接 / 域名读取 → 启用 / 过期 / 数据合法性 → 已耗尽 / Tor策略预检 → 密码 → 浏览器检查 → 最终目标与规则复核 → 原子名额消耗 → 最终业务响应与可选成功统计。校验失败不会通过缓存回退为无保护跳转。
+
+**HEAD 不是无副作用的额度探针。** 若它已经满足全部保护并到达最终跳转 / 文本响应，有限次数链接的 HEAD 与 GET 都消耗一次名额；HEAD 不写成功点击统计，并由最外层去掉正文。密码页 HEAD 不解锁、不扣次数。block_vpn 链接缺少有效证明时 HEAD 返回403；仅全局采集开启、单链接 block_vpn 关闭时 HEAD 可跳过时区采集。
+
+公开成功默认禁止 CDN 缓存。只在无密码、无地区分流、无次数上限、无浏览器流程的普通跳转中，才按 link.cache_ttl 允许私有客户端缓存；带保护的跳转 no-store，文本始终 no-store。不要在外层添加 Cache Everything 来覆盖这些响应。
+
+<a id="section-12-3"></a>
+
+### 12.3 密码表单协议
+
+首次 GET 受保护链接返回200 HTML密码页，无目标 Location。页面表单 action 是同源 `/__Linro_unlock/{slug}`；POST 的正文类型必须为 `application/x-www-form-urlencoded`，只允许一个 password 字段，流式正文最多8192字节。不得发送 JSON，不要把密码放在查询参数或日志中。
+
+来源校验要求能够证明同源：存在 Sec-Fetch-Site 时须为 same-origin；显式 Origin 须匹配完整 origin。Origin 缺失或字符串 null 仅在 Sec-Fetch-Site 明确 same-origin 时才可能通过；显式其他 origin 即使伪称 same-origin 也被拒绝。常规浏览器表单会携带相应元数据，第三方跨站页面不能借此获得解锁。
+
+密码错误返回401 HTML密码页，不返回目标；成功返回303到原短码和原查询参数，并设置 `__Host-Linro_unlock_*` Cookie。有效期900秒，绑定链接、主机和规则版本；生产为 Secure、HttpOnly、Path=/、SameSite=Lax。中间303不扣次数、不记成功点击，下一次 GET 重新检查全部条件；即使链接设为307 / 308，也不会把密码 POST 正文转发给目标。
+
+对无密码链接 POST 解锁不执行通用登录，返回405。修改规则、重设密码或移除密码会影响旧 Cookie 的有效性；新协议 Cookie 名与旧版不同。
+
+<a id="section-12-4"></a>
+
+### 12.4 浏览器检查协议
+
+当全局 `BROWSER_TIMEZONE_ENABLED=true` 或单链接 `block_vpn=1` 时，GET 可能先返回浏览器检查页。页面采集浏览器 `Intl` 时区字符串，而 IP时区来自 Cloudflare 的 request.cf；这是弱信号与策略判断，不是权威 VPN 识别或设备身份验证。
+
+浏览器将页面给出的挑战和时区通过同源 POST 提交到 `/__Linro_browser/{slug}`。仅允许两个表单字段 `challenge` 和 `timezone`，必须各一次；正文类型仍是 `application/x-www-form-urlencoded`，最大4096字节；challenge 非空且最多2200字符，timezone 最多64字符，可空但按 unknown 处理。
+
+请求的 **Accept 只决定成功表示，不改变正文格式或认证**：
+
+| Accept | 成功表示 |
+| --- | --- |
+| 明确接受 `application/json` 且 q有效并大于0 | 200，`{"ok":true,"data":{"next":"/welcome?_Linro_check=1"}}`；无 Location |
+| 未明确接受 JSON、通配或 JSON q=0 | 303，Location 指向相同的同源 next 路径 |
+
+两种成功响应都设置短期 `__Host-Linro_browser_*` Cookie、no-store、`Vary: Accept`，均不扣次数、不记成功点击。next 仅包含同源短码及清理后的查询，**不向 POST 返回最终目标 URL**；内置 JS 使用普通页面导航继续访问，避免 CSP `form-action 'self'` 在后续跨站表单跳转链中造成问题。旧式表单303仍存在，但不保证禁用 JavaScript 的浏览器能完成所有跨站后续行为。
+
+挑战有效窗口为120秒；签发证明不延长原挑战窗口。证明与链接规则、主机、查询及来访网络上下文绑定。恢复 GET 必须同时具有恰好一个 `_Linro_check=1` 与有效 Cookie；只有 marker、只有 Cookie、Cookie 被阻止、挑战过期或期间链接发生变化，都不能跳过检查。最终响应会清除该证明 Cookie，但源码没有服务端一次性消费表，不能称为绝对防重放的一次性凭证。
+
+block_vpn开启时，Tor / 时区不匹配或 unknown 会拒绝；未开启时全局采集主要用于记录，可允许 unknown。拒绝返回403且无目标和成功 Cookie。人工篡改表单时区不能被理解为可靠地证明“未使用 VPN”；此功能的可信度边界应在对外告知中保留。
+
+<a id="section-12-5"></a>
+
+### 12.5 查询参数与公开错误
+
+`_Linro_check` 是内部恢复标记，`_Linro_lang` 用于内部语言选择，不能作为普通营销参数透传。最终目标参数由 query_mode 与部署白名单共同决定，见配置章节；访问 URI 或最终组合 URL 过长可能414。
+
+公开响应可能为 HTML、纯文本或 JSON，**不是全部套用管理 API envelope**：直接拒绝通常纯文本，密码错误是 HTML；表单解析等抛出的 HttpError 可能返回标准 JSON错误；未处理的公开异常转成503纯文本及 Retry-After。探针应先看状态与 Content-Type。
+
+| 状态 | 常见公开情形 |
+| --- | --- |
+| 200 | 根路径 / health / 资源；密码页或浏览器检查页；最终文本；浏览器 POST JSON成功 |
+| 301 / 302 / 307 / 308 | 最终跳转，不代表目标网站随后成功 |
+| 303 | 解锁 / 浏览器检查中间同源恢复，不是最终点击 |
+| 400 / 415 | 表单 / 格式 / HTTPS问题；不同来源校验也可返回403 |
+| 401 | 密码错误页面 |
+| 403 | 次数耗尽、来源无效、浏览器策略拒绝 / 证明不足 |
+| 404 / 410 | 不存在、停用或过期 |
+| 405 | 方法错误或对不适用链接调用内部 POST |
+| 414 | URI / 目标组合过长 |
+| 429 | 限流；Retry-After通常60秒 |
+| 503 | D1 / 根 secret / 限流绑定 / 规则数据故障，或最终校验前规则变更 |
+| 508 | 最终检测到直接跳转环路 |
+
+**依据：** `apps/redirect/src/index.ts`；`public-pages.ts`；`browser-page.ts`；`unlock-origin.ts`；`packages/shared/src/browser-check.ts`；`link-password.ts`。
+
+<a id="examples"></a>
+
+## 13 · 可直接改值使用的调用示例
+
+<a id="section-13-1"></a>
+
+### 13.1 Bash：读取会话与新建链接
+
+以下环境变量属于 **调用客户端**，不是 deployment.json 字段。先在私有终端 / CI secret 中设置管理 origin、Access服务凭据和 Linro token。不要提交凭据到仓库。token 需有 links:read、domains:read；创建示例还需 links:write。外层 Access 必须已经允许所用服务身份。
+
+```bash
+export LINRO_ADMIN_ORIGIN='https://admin.example.com'
+# 下列三个值通过你的秘密管理工具注入，示例不提供真实凭据：
+# CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET, LINRO_API_TOKEN
+: "${CF_ACCESS_CLIENT_ID:?请设置 Access Client ID}"
+: "${CF_ACCESS_CLIENT_SECRET:?请设置 Access Client Secret}"
+: "${LINRO_API_TOKEN:?请设置 Linro 应用令牌}"
+
+curl --silent --show-error --fail-with-body --max-time 20 \
+  --dump-header session-headers.txt \
+  -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+  -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+  -H "Authorization: Bearer $LINRO_API_TOKEN" \
+  -H 'Accept: application/json' \
+  "$LINRO_ADMIN_ORIGIN/Linro/v1/session"
+```
+
+不要加 `-L` 自动把认证请求跟随到未知重定向主机。curl 的 `--fail-with-body` 主要对 HTTP 4xx / 5xx 失败；Access302仍可能退出0，必须检查响应头与 JSON结构。`session-headers.txt` 含会话相关响应元数据，按私有诊断文件保存。
+
+```bash
+# 先获取真实域名 ID，不是 DNS 名称。
+curl --silent --show-error --fail-with-body --max-time 20 \
+  -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+  -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+  -H "Authorization: Bearer $LINRO_API_TOKEN" \
+  -H 'Accept: application/json' \
+  "$LINRO_ADMIN_ORIGIN/Linro/v1/domains"
+
+# 编辑 domain_id 并确保短码未被占用；此命令会创建真实业务记录。
+cat > create-link.json <<'JSON'
+{
+  "domain_id":"11111111-1111-4111-8111-111111111111",
+  "slug":"docs-example",
+  "target_url":"https://www.example.org/docs",
+  "redirect_code":302,
+  "cache_ttl":0,
+  "block_vpn":false
+}
+JSON
+
+curl --silent --show-error --fail-with-body --max-time 20 \
+  -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+  -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+  -H "Authorization: Bearer $LINRO_API_TOKEN" \
+  --data-binary @create-link.json \
+  "$LINRO_ADMIN_ORIGIN/Linro/v1/links"
+```
+
+修改用 `-X PATCH` 与带 version 的 JSON；删除用 `-X DELETE` 和 version 查询。不要把 POST 响应中的整个 L 对象直接作为 PATCH 正文。创建请求超时先按 slug 查询结果，不能无条件重发。
+
+<a id="section-13-2"></a>
+
+### 13.2 PowerShell：读取与乐观锁修改
+
+凭据从当前环境读取；PowerShell示例使用 Invoke-RestMethod，限制不跟随302，错误原样终止。此例会修改指定链接的标题，先替换 id 并确认属于当前用户可写范围。
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$Origin = 'https://admin.example.com'
+$Required = 'CF_ACCESS_CLIENT_ID', 'CF_ACCESS_CLIENT_SECRET', 'LINRO_API_TOKEN'
+foreach ($Name in $Required) {
+    if (-not [Environment]::GetEnvironmentVariable($Name)) {
+        throw "缺少环境变量：$Name"
+    }
+}
+$Headers = @{
+    'CF-Access-Client-Id' = $env:CF_ACCESS_CLIENT_ID
+    'CF-Access-Client-Secret' = $env:CF_ACCESS_CLIENT_SECRET
+    'Authorization' = "Bearer $($env:LINRO_API_TOKEN)"
+    'Accept' = 'application/json'
+}
+$Id = '22222222-2222-4222-8222-222222222222'
+$Uri = "$Origin/Linro/v1/links/$Id"
+$Current = Invoke-RestMethod -Uri $Uri -Headers $Headers -Method Get `
+    -MaximumRedirection 0 -TimeoutSec 20
+if ($Current.ok -ne $true -or -not $Current.data.version) {
+    throw '未收到有效的 Linro 链接对象。'
+}
+$Body = @{ version = $Current.data.version; title = '更新后的标题' } |
+    ConvertTo-Json -Compress
+$Updated = Invoke-RestMethod -Uri $Uri -Headers $Headers -Method Patch `
+    -ContentType 'application/json; charset=utf-8' `
+    -Body ([Text.Encoding]::UTF8.GetBytes($Body)) `
+    -MaximumRedirection 0 -TimeoutSec 20
+$Updated.data | Select-Object id, slug, title, version
+```
+
+读取与写入之间仍可能被其他人更新而409，这是预期保护，不应自动忽略。客户端 / shell 版本差异不是本项目代码的一部分；请在目标客户端环境验证示例。
+
+<a id="section-13-3"></a>
+
+### 13.3 浏览器：创建交互式专用资源
+
+在已经登录的 **管理域名页面**开发者控制台执行。它使用当前同源 Access Cookie，不带应用 token；下例将真实创建一个7天有效、只读的本人 token。输出只在私有环境查看，并立即保存到秘密管理工具。
+
+```javascript
+(async () => {
+  const response = await fetch('/Linro/v1/tokens', {
+    method: 'POST',
+    credentials: 'same-origin',
+    redirect: 'manual',
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'X-Linro-CSRF': '1'
+    },
+    body: JSON.stringify({
+      name: 'docs-readonly',
+      scopes: ['links:read', 'domains:read'],
+      expires_at: Math.floor(Date.now() / 1000) + 7 * 86400
+    }),
+    signal: AbortSignal.timeout(20000)
+  });
+  if (!(response.headers.get('content-type') || '').includes('application/json')) {
+    throw new Error('未收到 JSON：检查 Access 登录状态与同源页面。');
+  }
+  const result = await response.json();
+  if (!response.ok || result.ok !== true) {
+    throw new Error(result.error?.code || `HTTP ${response.status}`);
+  }
+  window.prompt('完整 token 仅显示一次；安全保存后关闭此框。', result.data.token);
+})().catch(error => console.error(error.message));
+```
+
+用户管理可用同样的 fetch 结构调用 `/users`，但必须是 Owner；替换为 `{"email":"editor@example.com","role":"editor"}`。不要在任意外站控制台运行，也不要复制不理解的脚本或打印完整认证 Cookie。
+
+<a id="section-13-4"></a>
+
+### 13.4 Node.js：有边界的只读客户端
+
+保存为 `linro-read.mjs`，用项目所需的 Node22环境运行。仅读取，不自动重试写入，不跟随重定向，不把秘密或原始错误正文打印到日志。
+
+```javascript
+const required = name => {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing environment variable: ${name}`);
+  return value;
+};
+
+async function main() {
+  const origin = new URL(required('LINRO_ADMIN_ORIGIN'));
+  if (origin.protocol !== 'https:' || origin.username || origin.password ||
+      origin.pathname !== '/' || origin.search || origin.hash) {
+    throw new Error('LINRO_ADMIN_ORIGIN must be an HTTPS origin only.');
+  }
+  const token = required('LINRO_API_TOKEN');
+  if (!/^Linro_[A-Za-z0-9_-]{43}$/.test(token)) {
+    throw new Error('Invalid Linro token format.');
+  }
+  const headers = {
+    'Accept': 'application/json',
+    'Authorization': `Bearer ${token}`,
+    'CF-Access-Client-Id': required('CF_ACCESS_CLIENT_ID'),
+    'CF-Access-Client-Secret': required('CF_ACCESS_CLIENT_SECRET')
+  };
+  async function get(path) {
+    const url = new URL(`/Linro/v1${path}`, origin);
+    const response = await fetch(url, {
+      headers, redirect: 'manual', signal: AbortSignal.timeout(20000)
+    });
+    const requestId = response.headers.get('x-request-id') || 'unavailable';
+    if (response.status >= 300 && response.status < 400) {
+      throw new Error(`Authentication redirect (${response.status}); not followed.`);
+    }
+    if (!(response.headers.get('content-type') || '').includes('application/json')) {
+      throw new Error(`Non-JSON response (${response.status}); request_id=${requestId}`);
+    }
+    const result = await response.json();
+    if (!response.ok || result.ok !== true) {
+      throw new Error(`${result.error?.code || 'http_error'} (${response.status}); request_id=${requestId}`);
+    }
+    return result.data;
+  }
+  const session = await get('/session');
+  console.log({ version: session.version, scope: session.link_write_scope });
+  const links = await get('/links?limit=10&page=1');
+  console.log({ total: links.total, displayed: links.items.length });
+  // 不在默认日志输出短链目标、纯文本内容或任何 token。
+}
+main().catch(error => {
+  console.error(error instanceof Error ? error.message : 'Client failed.');
+  process.exitCode = 1;
+});
+```
+
+以上示例根据本版接口编写。示例中的创建 / 更新调用会写数据，使用前改成专用验收记录，不要直接指向现有业务链接。
+
+<a id="troubleshooting"></a>
+
+## 16 · 常见故障与错误码
+
+<a id="section-16-1"></a>
+
+### 16.1 按症状排查
+
+| 症状 | 首先检查 | 不应采用的处理 |
+| --- | --- | --- |
+| GUI能打开但显示登录失效，API返回HTML / 302 | Access会话、完整域名保护、Origin、客户端是否误跟随跳转 | 不将HTML解析失败解释为“链接为空”；不暴露管理API绕过Access |
+| Access已放行但Linro403 | 用户是否启用、邮箱是否预先登记、access_sub是否变化 | 不信任来访者自带邮箱头，不直接删除Owner保护 |
+| 首次Owner没有自动创建 | 用户表是否真正为空、邮箱大小写归一化后是否匹配bootstrap | 不清空已有用户表强行重新初始化 |
+| 带token的脚本仍401 | 两层认证、token完整前缀 / 长度、过期 / 撤销、用户是否停用 | 不只发送Access服务凭据，不手工修改旧token前缀 |
+| Owner token不能改别人的链接 | 所有token均是owned写范围；需交互式Owner或对应专用用户 | 不把token升级成管理scope或移除created_by检查 |
+| 页面提示版本冲突 | 最新version与提交字段差异 | 不自动重放陈旧整个对象 |
+| 公开域名health200，短码404 | D1域名记录、slug大小写、域名 / 链接启用、过期策略 | 不把health当作DB查询证明，不靠重建DNS解决业务记录错误 |
+| 一开启时区采集就大量503 | Redirect的BROWSER_CHECK_SECRET是否配置且合法、两端版本一致 | 不把新root替换为原密码root，不在代码中回退到无检查跳转 |
+| 密码原来能用，升级后全部失败 | 原LINK_PASSWORD_SECRET是否被保留、数据库哈希是否一致 | 不随机生成root替换旧root，不删除密码字段恢复可访问性 |
+| 浏览器检查反复出现或403 | Cookie被阻止、挑战过期、重复marker、规则变化、网络上下文变化、两端静态资源版本 | 不仅靠添加`_Linro_check=1`绕过验证；不把所有误拒绝称为VPN实锤 |
+| 无JavaScript浏览器无法最终跨站跳转 | 原生form303与CSP限制；使用项目正常JS导航流程验收 | 不全局移除CSP来隐藏回归 |
+| KV已配置但D1依旧被查询 | 当前实现就是d1-guarded缓存 | 不声称KV命中免D1；不把失联时缓存当授权来源 |
+| 统计“未配置” / 为空 / 报错 | 分别检查available、开关、dataset、账户ID、Admin查询secret及实际事件 | 不把available:false或查询失败显示成零点击 |
+| /stats慢，GUI20秒报错 | 8个顺序查询与上游每次10秒超时预算 | 不自动高频重试扩大上游429 |
+| 归档没有今天数据 / 没有时区明细 | 前两个完整UTC日的Cron策略、游标、既有daily_stats | 不期待归档接口补齐AE全部历史维度 |
+| 删除域名409 | 尚有链接引用；先移动或按授权删除 | 不手动禁用外键约束 |
+| TLS / 自定义域名异常 | 检查SNI、DNS、证书和平台状态，保留探活证据 | 不禁用TLS验证，不例行解绑重绑或循环发布 |
+
+<a id="section-16-2"></a>
+
+### 16.2 管理错误码速查
+
+这里列出主要可操作错误，不保证所有公开文本响应都带 error.code；同一请求通常先返回最先触发的认证 / 校验错误。
+
+| HTTP | error.code | 含义与处理 |
+| --- | --- | --- |
+| 400 | `invalid_json`、`empty_body` | JSON必须为有效UTF-8对象，正文不能为空 |
+| 400 | `unknown_field` | 删除未声明或只读字段；不要原样回传GET对象 |
+| 400 | `invalid_field` | 数字范围、类型、版本或通用字符串不合法 |
+| 400 | `invalid_slug` | slug格式 / 保留字不合法 |
+| 400 | `invalid_url`、`invalid_hostname`、`invalid_email` | 按模型规则提交URL、主机名、邮箱 |
+| 400 | `invalid_code`、`invalid_query_mode` | 选择支持的数字跳转码或query枚举 |
+| 400 | `internal_target`、`private_target`、`redirect_chain` | 目标是后台、未经准许的私有地址或已管理短链域名；改为已审阅的最终目标 |
+| 400 | `unsafe_query_mode` | 敏感认证 / 重置 / 跳转目标须使用discard |
+| 400 | `domain_not_found`、`admin_hostname` | 选择现有业务域名，不能用管理域名 |
+| 400 | `invalid_geo_rules`、`duplicate_geo_rule` | 地区规则结构、数量、代码或重复项错误 |
+| 400 | `invalid_response_mode`、`invalid_text_content`、`text_geo_conflict` | 正文类型 / 长度不合法，或text仍保留geo规则 |
+| 400 | `invalid_block_vpn`、`invalid_link_password` | 保护字段类型或密码约束不满足 |
+| 400 | `invalid_status`、`search_too_long` | 列表过滤器或关键词过长 |
+| 400 | `invalid_link_id` | 统计选择为空、格式错误、超出50项、重复参数或混用两种选择参数 |
+| 400 | `invalid_import`、`invalid_batch`、`invalid_action`、`duplicate_item` | 导入 / 批量请求结构与条数错误 |
+| 400 | `invalid_role`、`invalid_name` | 用户角色或站点 / token名称错误 |
+| 400 | `https_required` | 生产管理请求必须HTTPS |
+| 401 | `access_required` | Worker未收到有效的Access入口认证头 |
+| 401 | `invalid_access_token` | Access JWT签名、算法、claim、时间、issuer或aud不满足 |
+| 401 | `invalid_token` | 应用token格式、存在性、过期 / 撤销状态、用户状态不满足 |
+| 401 | `local_token_required` | 仅本地：开发token缺失或错误 |
+| 403 | `user_not_allowed`、`human_identity_required` | 用户未启用 / 身份不匹配，或服务身份缺少Linro token |
+| 403 | `forbidden`、`invalid_scopes` | 当前scope不足，或创建token试图越权 |
+| 403 | `interactive_only` | 当前使用token调用了交互式专用接口 |
+| 403 | `link_owner_required` | Editor / token试图写其他用户创建的链接 |
+| 403 | `cross_origin`、`csrf` | 来源或CSRF头不符合要求 |
+| 404 | `not_found`、`api_not_found` | 资源不存在，或路径 / 方法不受支持 |
+| 404 | `stats_link_not_found` | 统计选中的至少一个链接已不存在 |
+| 409 | `conflict` | slug、hostname或email唯一性冲突 |
+| 409 | `version_conflict` | 乐观锁冲突；刷新比较再提交 |
+| 409 | `in_use` | 外键仍引用资源或引用目标已不存在 |
+| 409 | `last_owner` | 操作会移除最后一名启用Owner |
+| 409 | `token_limit` | 已有50条未撤销token记录，先撤销不用的记录 |
+| 409 | `hostname_is_destination` | 新域名已被现有默认 / 地区目标引用，先迁移目标 |
+| 413 | `body_too_large` | 正文超过接口上限 |
+| 414 | `uri_too_long` | 最终组合URL过长 |
+| 415 | `content_type` | 管理API需application/json；密码POST另需表单类型 |
+| 421 | `wrong_host` | Admin请求origin与ADMIN_ORIGIN不一致 |
+| 429 | `rate_limited` | 管理API认证前或写入限流；查看Retry-After，不自动高频重试 |
+| 500 | `internal_error` | 未映射的Admin异常，包括部分D1或上游网络异常；保留request_id |
+| 502 | `analytics_query_failed` | AE上游HTTP、结构或计数校验失败 |
+| 503 | `access_not_configured`、`access_keys_unavailable` | Access配置无效或签名公钥暂不可获取 |
+| 503 | `link_password_unconfigured`、`invalid_password_record` | 密码根secret缺失或存储校验记录异常 |
+| 503 | `browser_check_unconfigured` | 开启单链接策略前未配置浏览器检查能力 |
+| 503 | `assets_missing`、`rate_limit_not_configured` | 管理端静态资源或生产写限流绑定缺失，检查构建与绑定 |
+| 503 | `security_policy_invalid` | 部署安全策略JSON、字段或允许值不合法 |
+
+公开浏览器表单还可能返回 `browser_form_type`、`invalid_browser_form` 等专用错误；不要按管理JSON字段去修复原本应提交的表单。源码对目标私网 / 已管理域名等检查也有专用错误，应以实际响应和 request_id定位对应验证函数。错误表用于排障，不作为忽略未知错误或将未知错误视为成功的理由。
+
+**依据：** `packages/shared/src/http.ts`、`validation.ts`、`policy.ts`、`destination.ts`、`access.ts`、`link-password.ts`；`apps/admin/src/worker/auth.ts`、`index.ts`、`api.ts`、`analytics.ts`；`apps/redirect/src/browser-page.ts`。

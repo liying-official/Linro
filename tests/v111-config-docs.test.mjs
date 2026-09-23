@@ -43,21 +43,21 @@ test('local initializer defaults device data to none and preserves both secrets 
   assert.equal(await readFile(join(dir,'.local','state','keep.txt'),'utf8'), 'existing state');
   for (const name of ['admin','redirect']) { const cfg = JSON.parse(await readFile(join(dir,'.local',name+'.jsonc'),'utf8')); assert.equal(cfg.vars.CLOUDFLARE_DEVICE_TYPE_ENABLED,'false'); assert.equal(cfg.kv_namespaces[0].binding,'REDIRECT_CACHE'); }
 });
-test('current WAF documentation uses the requested qualifier and narrows protection to unlock POSTs', async () => {
-  const doc = await read('README.md');
-  assert.match(doc,/同连接内 5 次\/分，跨连接不保证/);
+test('current WAF documentation describes code-defined IP buckets and narrows protection to unlock POSTs', async () => {
+  const doc = await read('docs/GUIDE.md');
+  assert.match(doc,/来源 IP 的 SHA-256 哈希/);assert.match(doc,/不是连接级计数/);
   assert.match(doc,/http\.request\.method eq "POST"/);
   assert.match(doc,/starts_with\(http\.request\.uri\.path, "\/__Linro_unlock\/"\)/);
-  assert.match(doc,/边缘级按 IP，不受 isolate 计数影响/);
+  assert.match(doc,/每个 key、每个 Cloudflare 位置 5 次 \/ 60 秒/);
   assert.match(doc,/不是全球单一原子计数器/);
   assert.match(doc,/不能承诺免费计划支持/);
-  assert.match(doc,/不自动调用Cloudflare账户创建规则/);
+  assert.match(doc,/不自动调用 Cloudflare 账户创建规则/);
   assert.doesNotMatch(doc,/默认每 IP\/位置每 60 秒 5 次/);
 });
 test('current analytics docs distinguish browser and IP timezones and do not promise a device value by default', async () => {
-  const doc = await read('README.md');
+  const doc = await read('docs/GUIDE.md');
   assert.match(doc,/不是浏览器/); assert.match(doc,/CF-Device-Type/);
-  assert.match(doc,/cloudflare_device_type_enabled.*false/);
+  assert.match(doc,/"cloudflare_device_type_enabled": false/);
   assert.match(doc,/none/); assert.match(doc,/blob6/); assert.match(doc,/blob7/);
   assert.match(doc,/8.*顺序|八.*顺序/); assert.match(doc,/link_ids/);
 });

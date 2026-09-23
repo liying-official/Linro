@@ -7,27 +7,32 @@ import { configs, validateConfig } from '../scripts/config-lib.mjs';
 import { SQLiteD1, setup, call, createLink, visit } from './harness.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const readme = await readFile(join(ROOT, 'README.md'), 'utf8');
+const readme = await readFile(join(ROOT, 'docs/GUIDE.md'), 'utf8');
 const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'));
 const blocks = [...readme.matchAll(/```([^\n]*)\n([\s\S]*?)```/g)];
 const commands = blocks.filter(m => /^(?:bash|powershell)$/.test(m[1])).map(m => m[2]).join('\n');
 // These tests inspect documented commands without contacting Cloudflare.
 
-test('requested fix release version and README match the shared package version', () => {
+test('bilingual documentation matches the shared release version', async () => {
   assert.equal(pkg.version, '1.0.1'); // User-requested release name; no version-ordering logic.
-  assert.ok(readme.startsWith(`# Linro v${pkg.version}\n`));
-  assert.ok(readme.includes(`version: "${pkg.version}"`));
-  assert.ok(readme.includes(`release/Linro-v${pkg.version}/`));
+  for (const file of ['README.md', 'README.en-US.md', 'docs/GUIDE.md', 'docs/GUIDE.en-US.md', 'docs/API.md', 'docs/API.en-US.md']) {
+    assert.ok((await readFile(join(ROOT, file), 'utf8')).includes(`v${pkg.version}`), file);
+  }
+  assert.ok((await readFile(join(ROOT, 'docs/RELEASE.md'), 'utf8')).includes(`release/Linro-v${pkg.version}/`));
 });
 
-test('README deployment JSON remains the real template contract, not a fabricated schema', async () => {
+test('documented initial configuration uses supported fields and the documented bootstrap override', async () => {
   const example = JSON.parse(await readFile(join(ROOT, 'deployment.example.json'), 'utf8'));
   const documented = JSON.parse(blocks.find(m => m[1] === 'json' && m[2].includes('"account_id"'))[2]);
-  assert.deepEqual(documented, example);
+  assert.ok(Object.keys(documented).every(key => Object.hasOwn(example, key) || ['admin_worker_name', 'redirect_worker_name'].includes(key)));
+  assert.equal(documented.browser_timezone_enabled, false);
+  assert.equal(documented.analytics_enabled, false);
+  assert.equal(documented.source_url, '');
   assert.throws(() => validateConfig(documented), /real 32-character/);
-  const c = { ...documented, account_id: 'a'.repeat(32), database_id: '11111111-1111-4111-8111-111111111111',
+  const c = { ...example, ...documented, account_id: 'a'.repeat(32), database_id: '11111111-1111-4111-8111-111111111111',
     access_issuer: 'https://test.cloudflareaccess.com', access_aud: 'b'.repeat(64) };
   assert.equal(validateConfig(c), c);
+  assert.equal(configs(c).redirect.vars.BROWSER_TIMEZONE_ENABLED, 'false');
 });
 
 test('all runnable npm commands in README exist and remote migration is explicitly separate from deploy', () => {
@@ -65,6 +70,9 @@ test('documented names, isolation, static gate, shared database, and optional an
 test('all documented diagnostic SQL executes as read-only against the actual schema', () => {
   const db = new SQLiteD1();
   try {
+    // Wrangler owns this bookkeeping table; the application harness applies
+    // migration SQL directly and therefore does not create it automatically.
+    db.sqlite.exec('CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)');
     const sqls = [...commands.matchAll(/--command "([^"\n]+)"/g)].map(m => m[1]);
     assert.ok(sqls.length >= 6);
     const before = db.sqlite.prepare('SELECT total_changes() AS n').get().n;
@@ -76,13 +84,20 @@ test('all documented diagnostic SQL executes as read-only against the actual sch
   } finally { db.close(); }
 });
 
-test('README internal links and explicit navigation anchors resolve in the release', async () => {
-  for (const m of readme.matchAll(/\]\(([^)\s]+)\)/g)) {
+test('bilingual README and guide links resolve in the release, including HTML language queries', async () => {
+ for (const file of ['README.md', 'README.en-US.md', 'docs/GUIDE.md', 'docs/GUIDE.en-US.md', 'docs/API.md', 'docs/API.en-US.md']) {
+  const document = await readFile(join(ROOT, file), 'utf8');
+  for (const m of document.matchAll(/\]\(([^)\s]+)\)/g)) {
     const target = m[1];
     if (/^https?:/.test(target)) continue;
-    if (target.startsWith('#')) { assert.ok(readme.includes(`<a id="${target.slice(1)}"></a>`), target); }
-    else { await access(join(ROOT, target.split('#')[0])); }
+    const [relativeFile, anchor] = target.split('#');
+    const destination = new URL(relativeFile.split('?')[0] || file.split('/').at(-1), new URL(file, new URL('../', import.meta.url)));
+    await access(destination);
+    if (anchor) assert.ok((await readFile(destination, 'utf8')).includes(`id="${anchor}"`), `${file}: ${target}`);
   }
+ }
+  const html = await readFile(join(ROOT, 'docs/index.html'), 'utf8');
+  assert.match(html, /^<!doctype html>/i);
   assert.match(readme, /Windows/); assert.match(readme, /PowerShell/); assert.match(readme, /Bash/);
 });
 
