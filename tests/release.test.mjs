@@ -49,7 +49,7 @@ test('source release stages every expected source with a fresh verified manifest
   assert.equal(rows.length, result.manifestEntries); assert.equal(result.totalFiles, rows.length + 1);
   assert.deepEqual(rows.map(row => row.name), rows.map(row => row.name).sort());
   for (const row of rows) assert.equal(digest(await readFile(join(result.path, row.name))), row.hash, row.name);
-  for (const name of ['apps/admin/src/web/App.tsx', 'apps/admin/src/web/i18n.ts', 'apps/redirect/src/index.ts', '.github/workflows/ci.yml', 'migrations/0001_initial.sql']) assert.ok(rows.some(row => row.name === name));
+  for (const name of ['README.md', 'README.en-US.md', 'docs/GUIDE.md', 'docs/GUIDE.en-US.md', 'docs/API.md', 'docs/API.en-US.md', 'apps/admin/src/web/App.tsx', 'apps/admin/src/web/i18n.ts', 'apps/redirect/src/index.ts', '.github/workflows/ci.yml', 'migrations/0001_initial.sql']) assert.ok(rows.some(row => row.name === name));
   assert.ok(!rows.some(row => row.name === 'MANIFEST.sha256'));
 });
 

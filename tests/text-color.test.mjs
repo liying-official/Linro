@@ -35,5 +35,5 @@ test('text-only refinement preserves the published version, license, sky/white p
   assert.match(css, /--accent:\s*#87CEEB/i);
   assert.match(css, /background:\s*#FFFFFF/i);
   assert.match(css, /outline-color:\s*#2145C4/i);
-  assert.match(read('README.md'), /普通正文与说明文字 `#0D394A`/);
+  assert.match(read('docs/GUIDE.md'), /#87CEEB.*#FFFFFF.*#0D394A/);
 });

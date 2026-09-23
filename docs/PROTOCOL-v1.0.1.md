@@ -1,25 +1,22 @@
-# Linro v1.0.1 协议升级
+# Linro v1.0.1 协议标识
 
-适用于 Linro v1.0.1。当前协议标识如下；旧协议名称不再作为别名。
+[English](PROTOCOL-v1.0.1.en-US.md) · [API](API.md) · [升级](GUIDE.md#upgrade)
 
-| 项目 | 当前标识 |
-|---|---|
-| API 基础路径 | `/Linro/v1` |
-| 应用令牌 | `Linro_` + 43 位 base64url 随机串 |
-| CSRF / 本地开发请求头 | `X-Linro-CSRF` / `X-Linro-Dev` |
-| 解锁与浏览器检查 | `/__Linro_unlock/:slug` / `/__Linro_browser/:slug` |
-| 公开检查资源 | `/__Linro_assets/password.css` / `/__Linro_assets/browser.js` |
-| 访客 Cookie | `__Host-Linro_unlock_*` / `__Host-Linro_browser_*` |
-| 开发环境 Cookie | `Linro_unlock_*` / `Linro_browser_*` |
-| 内部查询参数 | `_Linro_check` / `_Linro_lang` |
+| 接口或数据 | v1.0.1 标识 |
+| --- | --- |
+| 管理 API | `/Linro/v1`，大小写敏感 |
+| 应用 Bearer token | `Linro_` 加43位 base64url 字符；需使用完整创建返回值 |
+| 交互式 CSRF / 本地开发头 | `X-Linro-CSRF` / `X-Linro-Dev` |
+| 公开密码 / 浏览器 POST | `/__Linro_unlock/:slug` / `/__Linro_browser/:slug` |
+| 自源资源 | `/__Linro_assets/password.css`、`/__Linro_assets/browser.js` |
+| 内部查询参数 | `_Linro_check`、`_Linro_lang`，不透传给目标 |
+| 生产 Cookie | `__Host-Linro_unlock_*`、`__Host-Linro_browser_*` |
+| JSON 导出 | `format: "linro"`、`version: "1.0.1"` |
 
-URL、令牌和 Cookie 名称区分大小写；HTTP 请求头按标准不区分大小写。`__Host-` 是浏览器安全前缀，继续保留，Cookie 的 Secure、HttpOnly、SameSite、有效期及主机/规则绑定不放宽。
+旧管理路径、旧 token 前缀及旧内部路径不提供兼容别名。数据库哈希按完整 token 计算；手工换前缀不会得到有效新 token。通过正常交互式会话重新签发并更新自动化客户端。旧 Cookie 不会自动迁移为新 Cookie。
 
-## 升级步骤
+这是公开协议变化，不是云资源重建要求。保留 Worker / D1 / KV / 数据集名称和原根 secrets；不要因品牌变化重建数据库。内部密码用途标签、KV `cf-links:route:v1:` 前缀、CSV `_cf_links_csv` 安全标记及本地身份键可能保留历史名称，它们不是旧公开 API 仍可使用的证明。
 
-1. 保存部署配置、secret 和数据库备份，同步部署两个 Worker。
-2. API 客户端更新基础路径和请求头；Owner 通过原有 Cloudflare Access 登录后重新创建应用令牌，替换调用端保存的令牌，再撤销不用的旧记录。
-3. 不能把旧令牌的字符串前缀改写后继续使用：数据库存储的是完整令牌哈希。
-4. 访客重新完成密码或浏览器检查，以取得新的 Cookie。旧 Cookie 不授予访问权限。
+本源码包含0001–0004四份数据库迁移。根据目标库列出的待执行项升级，不能只根据版本号推断完整性。保留原 `LINK_PASSWORD_SECRET` 才能继续验证已存的密码校验串。浏览器检查使用另一个独立 secret。
 
-旧 API 命名空间明确返回 404，避免误落入 GUI；新 API 仍执行 Access、角色、scope、CSRF 和同源检查。原数据库迁移文件逐字节保留，已有密码的派生方式和密码学用途标签保留，不要求重新设置短链密码。KV 键、本地 Owner 身份、浏览器存储键及 Cloudflare 资源名称不在本次协议更名范围内。
+Admin 和 Redirect 不是原子发布。计划切换顺序、协议兼容与维护窗口，并分别验证实际生效版本、客户端、静态资源、认证、迁移和专用测试链接。代码回滚不回滚数据库，也不能恢复被轮换掉的 secret。

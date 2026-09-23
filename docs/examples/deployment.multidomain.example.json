@@ -32,7 +32,7 @@
   "redirect_cache_ttl": 300,
   "cloudflare_device_type_enabled": false,
   "browser_timezone_enabled": false,
-  "source_url": "https://github.com/liying-official/Linro",
+  "source_url": "",
   "admin_worker_name": "linro-admin",
   "redirect_worker_name": "linro-redirect"
 }

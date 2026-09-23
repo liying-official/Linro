@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 // tests create .build/, Wrangler creates state, and deployment config may be private.
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const ROOT_FILES = [
-  '.editorconfig', '.gitignore', 'CHANGELOG.md', 'LICENSE', 'NOTICE', 'README.md', 'docs/.nojekyll',
+  '.editorconfig', '.gitignore', 'CHANGELOG.md', 'LICENSE', 'NOTICE', 'README.md', 'README.en-US.md', 'docs/.nojekyll',
   'deployment.example.json', 'package.json', 'package-lock.json',
   'tsconfig.web.json', 'tsconfig.worker.json',
 ];
