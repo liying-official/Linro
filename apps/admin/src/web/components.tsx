@@ -40,10 +40,7 @@ export function Pagination({ page, total, limit, onChange, locale }: { page: num
   return <div className="pagination"><span>{summary}</span><div><button disabled={page <= 1} onClick={() => onChange(page - 1)}>{locale === 'zh-CN' ? '上一页' : 'Previous'}</button><button disabled={page >= pages} onClick={() => onChange(page + 1)}>{locale === 'zh-CN' ? '下一页' : 'Next'}</button></div></div>;
 }
 
-export function TrafficChart({ rows, locale }: { rows: any[]; locale: Locale }) {
-  if (!rows.length) return <Empty title={locale === 'zh-CN' ? '暂无点击数据' : 'No click data yet'} detail={locale === 'zh-CN' ? '产生 GET 跳转请求后，统计数据会逐步显示。' : 'Analytics will appear after GET redirect requests are recorded.'}/>;
-  const values = rows.map(row => Number(row.clicks));
-  const max = Math.max(1, ...values);
-  const points = values.map((value, index) => `${40 + index * 650 / Math.max(values.length - 1, 1)},${210 - value / max * 165}`).join(' ');
-  return <div className="chart"><svg viewBox="0 0 730 245" role="img" aria-label={locale === 'zh-CN' ? '每日点击趋势' : 'Daily click trend'}><g className="chart-grid"><path d="M40 45h650M40 100h650M40 155h650M40 210h650"/></g><polyline className="chart-line" points={points}/>{values.map((v, i) => <circle key={i} className="chart-dot" cx={40 + i * 650 / Math.max(values.length - 1, 1)} cy={210 - v / max * 165} r="4"><title>{String(rows[i].date)}: {v}</title></circle>)}<text x="40" y="237">{String(rows[0]?.date)}</text><text x="690" y="237" textAnchor="end">{String(rows[rows.length - 1]?.date)}</text><text x="40" y="28">{locale === 'zh-CN' ? '峰值 ' : 'Peak '}{Math.round(max).toLocaleString(locale)}</text></svg></div>;
+const LazyTrafficChart = React.lazy(() => import('./TrafficChart').then(module => ({ default: module.TrafficChart })));
+export function TrafficChart(props: { rows: any[]; locale: Locale }) {
+  return <React.Suspense fallback={<p className="analytics-provenance" role="status">{props.locale === 'zh-CN' ? '正在加载图表…' : 'Loading chart…'}</p>}><LazyTrafficChart {...props}/></React.Suspense>;
 }

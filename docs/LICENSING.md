@@ -1,5 +1,7 @@
 # Linro 许可证与对应源码
 
+TailAdmin React 的布局、侧栏、顶栏和卡片适配位于 `apps/admin/src/web/tailadmin/`，保留 MIT 许可；原始许可见 `LICENSES/TailAdmin-MIT.txt`，固定上游版本见 `NOTICE`。Recharts 库使用 MIT 许可，文本见 `LICENSES/Recharts-MIT.txt`。这些第三方许可不改变 Linro 其他文件及整体的 AGPL-3.0-only 许可；未引入 ApexCharts 或 TailAdmin Pro 代码。
+
 Linro v1.0.1 整体采用 **AGPL-3.0-only**，即 GNU Affero General Public License 第 3 版，仅此版本，不是 `-or-later`。根 `LICENSE` 为未修改的完整许可证文本；`package.json` 使用相同 SPDX 标识。标准许可证末尾的通用示例并不替代此处“仅第 3 版”的明确选择。
 
 本项目基于用户提供的历史源码修改。原有 MIT 版权、许可和免责声明在 `NOTICE` 与 `LICENSES/cf-links-MIT.txt` 中保留，不删除原作者归属，不把第三方依赖改成 AGPL，也不声称此前已取得的 MIT 版本权利被撤回。历史报告、用户提供的证据和依赖各自保留原有来源/许可边界；本包不附带依赖或字体文件。
