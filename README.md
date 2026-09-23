@@ -2,6 +2,8 @@
 
 [完整双语指南（HTML）](docs/index.html) · [多域名配置示例](docs/examples/deployment.multidomain.example.json)
 
+管理界面采用 TailAdmin React 的 MIT 布局与卡片组件适配，图表使用 Recharts（MIT），不包含 ApexCharts。保留简体中文 / English、天蓝色 `#87CEEB`、白色 `#FFFFFF` 与文字 `#0D394A`；API、Access、权限、数据和公开访问策略保持原有实现。上游归属及许可见 [NOTICE](NOTICE) 和 [许可说明](docs/LICENSING.md)。
+
 Linro 是 Cloudflare 原生私有短链平台：**独立 Redirect Worker + Admin Worker + D1 + 可选 KV + Workers Static Assets + React 简体中文/English GUI**。保留密码、地理分流、纯文本、请求上限、浏览器环境检查、Access/RBAC 与访问统计。
 
 主题：天蓝色 `#87CEEB`、白色 `#FFFFFF`、主要文字 `#0D394A`、普通正文与说明文字 `#0D394A`。总览已过期图标为 X。

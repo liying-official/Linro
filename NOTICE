@@ -19,3 +19,13 @@ No project contributor identities or exclusive ownership claims are invented.
 
 This software is provided WITHOUT ANY WARRANTY. See LICENSE.
 Network deployment: see docs/LICENSING.md for the Corresponding Source offer.
+
+TailAdmin React UI adaptations
+Copyright (c) 2023 TailAdmin — MIT License, preserved in LICENSES/TailAdmin-MIT.txt.
+Upstream: https://github.com/TailAdmin/free-react-tailwind-admin-dashboard
+Revision: e888dd1716b9803b535c7c2fa4f2c6b7d39b3da9 (v2.4.0).
+Adapted AppLayout, AppSidebar, AppHeader, ComponentCard and EcommerceMetrics
+for Linro's existing bilingual controllers, permissions and sky-blue theme.
+The files under apps/admin/src/web/tailadmin retain the MIT license.
+Recharts replaces upstream chart dependencies; its MIT license is preserved
+in LICENSES/Recharts-MIT.txt. Other Linro files retain their existing licenses.
