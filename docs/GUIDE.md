@@ -333,7 +333,7 @@ node scripts/smoke.mjs --short-url https://go.example.com/docs --expected-locati
 npx wrangler secret put RADAR_API_TOKEN --config apps/redirect/wrangler.jsonc
 ```
 
-该策略只接受 Radar 分类 `ACCESS_ISP` 的 ASN。通过网络检查后，页面发一次同源 RTT 探针；浏览器耗时与边缘连接 RTT 的绝对差大于 50 ms 会被拒绝。缺失时区、分类、RTT 或有效证明也可能被拒绝。它是严格的可选启发式策略，**不保证准确识别所有 VPN**；企业、校园网络、繁忙设备或排队也可能失败。
+该策略只接受 Radar 分类 `ACCESS_ISP` 或 `ORGANIZATION` 的 ASN。通过网络检查后，页面发一次同源 RTT 探针；浏览器耗时与边缘连接 RTT 的绝对差大于 50 ms 会被拒绝。缺失时区、分类、RTT 或有效证明也可能被拒绝。它是严格的可选启发式策略，**不保证准确识别所有 VPN**；企业、校园网络、繁忙设备或排队也可能失败。
 
 挑战和证明最长 120 秒，签发证明不会续期；它们绑定链接规则、主机、查询和网络上下文。源码没有服务端一次性消费表，不能承诺绝对防重放。无 JavaScript、Cookie 被禁用、网络变化或过期会阻止流程。HEAD 在只有全局采集时可以跳过采集；单链阻止开启且无证明时返回 403。
 

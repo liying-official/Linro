@@ -507,7 +507,7 @@ Before enabling `block_vpn`, give Redirect a read-only Radar token with **Accoun
 npx wrangler secret put RADAR_API_TOKEN --config apps/redirect/wrangler.jsonc
 ```
 
-The Worker checks Tor and the visitor ASN before the password page; only Radar category `ACCESS_ISP` proceeds. Classification lookups have bounded caching, concurrency sharing, and failure cooldowns. A browser challenge sends one same-origin RTT probe and compares its elapsed time with the platform TCP/QUIC RTT; a difference above 50 ms denies access. Missing/unverifiable RTT also denies it. [Radar setup](https://developers.cloudflare.com/radar/get-started/first-request/)
+The Worker checks Tor and the visitor ASN before the password page; only ASNs in the Radar categories `ACCESS_ISP` and `ORGANIZATION` proceed. Classification lookups have bounded caching, concurrency sharing, and failure cooldowns. A browser challenge sends one same-origin RTT probe and compares its elapsed time with the platform TCP/QUIC RTT; a difference above 50 ms denies access. Missing/unverifiable RTT also denies it. [Radar setup](https://developers.cloudflare.com/radar/get-started/first-request/)
 
 The browser reports `Intl.DateTimeFormat().resolvedOptions().timeZone`. The server compares normalized timezone identifiers with `request.cf.timezone`, not just today's UTC offset. `request.cf.country === 'T1'` is the Tor signal. Self-reported timezone is untrusted. Travel, system settings, shared networks, device load, and geolocation mistakes can cause false positives. Unknown timezone is not proof of VPN use, but `block_vpn` rejects it.
 

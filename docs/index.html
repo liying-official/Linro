@@ -6,7 +6,7 @@
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light"><meta name="theme-color" content="#e7f4f8">
 <title>Linro v1.0.2 · 使用手册 / Handbook</title>
-<!-- Generated from the repository Markdown. Rebuild: npm run build:docs. Source digest: b64a19dda37c32b3f62c819044433acd5cac4da220805b549179fd67dca24c18 -->
+<!-- Generated from the repository Markdown. Rebuild: npm run build:docs. Source digest: f9f011a72235e460ce3d6a9fa4f5da9a577cb805b17dae8d5142b11eb523607b -->
 <style>:root {
   color-scheme: light;
   --ink: #173d4a;
@@ -1040,7 +1040,7 @@ node scripts/smoke.mjs --short-url https://go.example.com/docs --expected-locati
 <p>开启单链检查前，两端需有 <code>BROWSER_CHECK_SECRET</code>，Redirect 还需有账户 Radar 读取令牌：</p>
 <pre><code class="language-bash">npx wrangler secret put RADAR_API_TOKEN --config apps/redirect/wrangler.jsonc
 </code></pre>
-<p>该策略只接受 Radar 分类 <code>ACCESS_ISP</code> 的 ASN。通过网络检查后，页面发一次同源 RTT 探针；浏览器耗时与边缘连接 RTT 的绝对差大于 50 ms 会被拒绝。缺失时区、分类、RTT 或有效证明也可能被拒绝。它是严格的可选启发式策略，<strong>不保证准确识别所有 VPN</strong>；企业、校园网络、繁忙设备或排队也可能失败。</p>
+<p>该策略只接受 Radar 分类 <code>ACCESS_ISP</code> 或 <code>ORGANIZATION</code> 的 ASN。通过网络检查后，页面发一次同源 RTT 探针；浏览器耗时与边缘连接 RTT 的绝对差大于 50 ms 会被拒绝。缺失时区、分类、RTT 或有效证明也可能被拒绝。它是严格的可选启发式策略，<strong>不保证准确识别所有 VPN</strong>；企业、校园网络、繁忙设备或排队也可能失败。</p>
 <p>挑战和证明最长 120 秒，签发证明不会续期；它们绑定链接规则、主机、查询和网络上下文。源码没有服务端一次性消费表，不能承诺绝对防重放。无 JavaScript、Cookie 被禁用、网络变化或过期会阻止流程。HEAD 在只有全局采集时可以跳过采集；单链阻止开启且无证明时返回 403。</p>
 <h3 id="zh-guide-63-kv辅助缓存不是数据库替身">6.3 KV：辅助缓存，不是数据库替身<a class="heading-link" href="#zh-guide-63-kv辅助缓存不是数据库替身" aria-label="本节链接">#</a></h3>
 <p><code>redirect_cache_namespace_id</code> 留空表示不用 KV。需要时先创建 namespace：</p>
@@ -1958,7 +1958,7 @@ npx wrangler d1 execute DB --remote --config apps/admin/wrangler.jsonc --command
 </code></pre>
 <p>未明确接受 JSON、仅通配或 JSON q=0 时返回 303，Location 为同一个 next。两种成功都设置短期 <code>__Host-Linro_browser_*</code> Cookie、<code>Vary: Accept</code> 和 no-store，不扣额度或记成功点击，也不在 POST 中给出最终目标。</p>
 <p>恢复 GET 必须同时有恰好一个 <code>_Linro_check=1</code> 和有效 Cookie。证明最长 120 秒，不延长挑战窗口，绑定规则、主机、查询和网络上下文；缺一、过期或变化都不能绕过。最终会清除 Cookie，但没有服务端一次性消费表，不是绝对防重放的一次性凭据。</p>
-<p>单链 VPN 检查在密码前判断 Tor 与 Radar ASN，只允许 <code>ACCESS_ISP</code>。通过后浏览器发一次 <code>/__Linro_rtt</code> 同源 POST，使用相同查询部分，表单只含一个有效 <code>challenge</code>，也受 4096 字节和同源校验限制。成功返回 200 <code>text/plain</code> 的加密回执，最多 128 个 base64url 字符、no-store；浏览器把它与非负有限数字 <code>elapsed</code> 一起编码成 JSON 字符串，作为后续表单的 <code>latency</code> 字段。耗时与平台 RTT 绝对差大于 50 ms 拒绝，缺有效回执也拒绝；探针不扣次数。提前被网络策略拒绝时直接为 403 结果页，不发送探针。</p>
+<p>单链 VPN 检查在密码前判断 Tor 与 Radar ASN，只允许 <code>ACCESS_ISP</code> 或 <code>ORGANIZATION</code>。通过后浏览器发一次 <code>/__Linro_rtt</code> 同源 POST，使用相同查询部分，表单只含一个有效 <code>challenge</code>，也受 4096 字节和同源校验限制。成功返回 200 <code>text/plain</code> 的加密回执，最多 128 个 base64url 字符、no-store；浏览器把它与非负有限数字 <code>elapsed</code> 一起编码成 JSON 字符串，作为后续表单的 <code>latency</code> 字段。耗时与平台 RTT 绝对差大于 50 ms 拒绝，缺有效回执也拒绝；探针不扣次数。提前被网络策略拒绝时直接为 403 结果页，不发送探针。</p>
 <p>内置 JS 使用普通导航继续，避免把密码/浏览器 POST 链式提交到跨站目标。旧式 303 表单仍在，但不能保证无 JS/Cookie 的客户端完成所有流程。保护页提供中文/English 切换。</p>
 <h3 id="zh-api-公开状态码怎么读">公开状态码怎么读？<a class="heading-link" href="#zh-api-公开状态码怎么读" aria-label="本节链接">#</a></h3>
 <div class="table-scroll" tabindex="0"><table>
@@ -2297,7 +2297,7 @@ $LinroUpdated.data | Select-Object id,slug,title,version
 <p>密码使用随机盐、PBKDF2-SHA256 和独立根密钥参与的 HMAC pepper，数据库不存明文。两个 Worker 必须保留相同的 <code>LINK_PASSWORD_SECRET</code>。解锁只回到同源短链，密码不会被 POST 给目标网站；密码 Cookie 最长 900 秒，规则变更可让旧证明失效。</p>
 <p>次数上限是服务端授权次数，符合条件的 HEAD 也会使用额度，不代表独立访客数。数据库提交后若响应丢失，可能保守占用一次，不自动退款。访客电脑已经缓存的跳转也不能由服务器强制收回。</p>
 <h2 id="zh-security-浏览器检查有局限的信号">浏览器检查：有局限的信号<a class="heading-link" href="#zh-security-浏览器检查有局限的信号" aria-label="本节链接">#</a></h2>
-<p>浏览器时区由客户端自己报告，不能当作可信身份。IP 时区和 Tor 标记来自平台，但仍可能存在地理数据误差。单链 <code>block_vpn</code> 还要求 Radar 将 ASN 分类为 <code>ACCESS_ISP</code>，并校验一次同源探针的加密 RTT 回执；时区、分类或延迟不可验证时会拒绝。</p>
+<p>浏览器时区由客户端自己报告，不能当作可信身份。IP 时区和 Tor 标记来自平台，但仍可能存在地理数据误差。单链 <code>block_vpn</code> 还要求 Radar 将 ASN 分类为 <code>ACCESS_ISP</code> 或 <code>ORGANIZATION</code>，并校验一次同源探针的加密 RTT 回执；时区、分类或延迟不可验证时会拒绝。</p>
 <p>这可能拦住正常旅行用户、校园/企业网络或繁忙设备，也不能保证发现所有代理。只在明确接受这些代价的链接上启用。</p>
 <p>挑战与证明有效窗口最长 120 秒，并绑定规则、主机、查询和网络上下文。完成后 Cookie 会清除，但没有服务端一次性消费表；不能宣称绝对防重放。公开密码表单允许的缺失/null Origin 窄例外要求明确同源元数据，显式其他 Origin 仍拒绝，且不会放宽后台 CSRF。</p>
 <h2 id="zh-security-哪些访问数据会被记录">哪些访问数据会被记录？<a class="heading-link" href="#zh-security-哪些访问数据会被记录" aria-label="本节链接">#</a></h2>
@@ -2464,7 +2464,7 @@ npm run build:demo
 <h2 id="zh-protocol-页面资源与访客流程">页面资源与访客流程<a class="heading-link" href="#zh-protocol-页面资源与访客流程" aria-label="本节链接">#</a></h2>
 <p>页面使用带内容指纹的 <code>password.css</code>、<code>password.js</code>、<code>browser.js</code>，路径位于 <code>/__Linro_assets/</code>，指纹版本可长期缓存。没有指纹的旧路径继续返回当前资源，但使用 <code>Cache-Control: no-store</code>。</p>
 <p>密码和浏览器验证成功时，内置页面接收 200 JSON 并重新打开同源短链；普通表单可得到 303。两种方式都不会把 POST 密码提交给最终目标。完整字段、Cookie 与错误行为见 <a href="#zh-api">API</a>。</p>
-<p>单链 VPN 检查会先判断 Tor 和 ASN，仅 Radar 的 <code>ACCESS_ISP</code> 分类可继续；通过后每次挑战尝试发送一个同源 RTT 探针。若网络在挑战前就被拒绝，浏览器直接得到 403 结果页，不发送探针。</p>
+<p>单链 VPN 检查会先判断 Tor 和 ASN，仅 Radar 的 <code>ACCESS_ISP</code> 或 <code>ORGANIZATION</code> 分类可继续；通过后每次挑战尝试发送一个同源 RTT 探针。若网络在挑战前就被拒绝，浏览器直接得到 403 结果页，不发送探针。</p>
 <h2 id="zh-protocol-从-v101-升级要保留什么">从 v1.0.1 升级要保留什么？<a class="heading-link" href="#zh-protocol-从-v101-升级要保留什么" aria-label="本节链接">#</a></h2>
 <p>保留 Worker 名称、数据库与其他资源绑定、Access 设置和原根密钥。已有令牌哈希、Cookie 格式、KV 键和 CSV 标记保持兼容，已有密码和有效令牌按原期限与规则继续验证。某些内部兼容字符串保留旧名称是为了继续读取已有数据，不能只为“看起来统一”而替换。</p>
 <p>源码包含 <code>0001_initial.sql</code> 至 <code>0006_destination_hosts_and_archive.sql</code>。已经全部应用六项的数据库无需新增迁移；其他实例按实际迁移账本补齐，不按文件夹版本猜测，也不清库重建。</p>
@@ -3494,7 +3494,7 @@ npx wrangler secret put BROWSER_CHECK_SECRET --config apps/redirect/wrangler.jso
 <p>Before enabling <code>block_vpn</code>, give Redirect a read-only Radar token with <strong>Account → Radar → Read</strong>:</p>
 <pre><code class="language-bash">npx wrangler secret put RADAR_API_TOKEN --config apps/redirect/wrangler.jsonc
 </code></pre>
-<p>The Worker checks Tor and the visitor ASN before the password page; only Radar category <code>ACCESS_ISP</code> proceeds. Classification lookups have bounded caching, concurrency sharing, and failure cooldowns. A browser challenge sends one same-origin RTT probe and compares its elapsed time with the platform TCP/QUIC RTT; a difference above 50 ms denies access. Missing/unverifiable RTT also denies it. <a href="https://developers.cloudflare.com/radar/get-started/first-request/">Radar setup</a></p>
+<p>The Worker checks Tor and the visitor ASN before the password page; only ASNs in the Radar categories <code>ACCESS_ISP</code> and <code>ORGANIZATION</code> proceed. Classification lookups have bounded caching, concurrency sharing, and failure cooldowns. A browser challenge sends one same-origin RTT probe and compares its elapsed time with the platform TCP/QUIC RTT; a difference above 50 ms denies access. Missing/unverifiable RTT also denies it. <a href="https://developers.cloudflare.com/radar/get-started/first-request/">Radar setup</a></p>
 <p>The browser reports <code>Intl.DateTimeFormat().resolvedOptions().timeZone</code>. The server compares normalized timezone identifiers with <code>request.cf.timezone</code>, not just today&#39;s UTC offset. <code>request.cf.country === &#39;T1&#39;</code> is the Tor signal. Self-reported timezone is untrusted. Travel, system settings, shared networks, device load, and geolocation mistakes can cause false positives. Unknown timezone is not proof of VPN use, but <code>block_vpn</code> rejects it.</p>
 <p>A check page leads to a same-origin POST, a short-lived proof cookie, and a fresh GET with current D1 checks. Proof expires within the original 120-second challenge window. There is no server-side one-use consumption table; do not describe it as absolutely replay-proof. JavaScript/cookies are needed for the intended flow. HEAD skips collection-only JavaScript, but a VPN-protected HEAD without valid proof returns 403.</p>
 <p>Browser checking adds requests and latency. Use it where its policy is useful, not simply because it is available. A pre-challenge network denial returns a 403 result page and sends no RTT probe.</p>
@@ -4601,7 +4601,7 @@ npm run verify:deployment -- --url https://go.example.com/health --family 4
 <p>A GET may show the browser page when effective global collection is active or the link has <code>block_vpn</code>. Effective global collection needs both switches and the Redirect Analytics writer. A valid root secret is needed to issue/verify challenges.</p>
 <p>The same-origin form sends <code>challenge</code> and <code>timezone</code> once each to <code>/__Linro_browser/{slug}</code>. For <code>block_vpn</code>, it also sends <code>latency</code>, a JSON string with numeric <code>elapsed</code> milliseconds and the Worker&#39;s authenticated encrypted <code>receipt</code> from one same-origin <code>/__Linro_rtt</code> probe. Form size is at most 4096 bytes, challenge 2200 code units, and timezone 64.</p>
 <p>The RTT endpoint itself takes <code>application/x-www-form-urlencoded</code> with exactly one <code>challenge</code>, applies the same-origin check, and accepts at most 4096 body bytes. Success returns the authenticated encrypted receipt as text, not JSON. Its receipt is bound to the challenge.</p>
-<p>Browser timezone comes from <code>Intl.DateTimeFormat().resolvedOptions().timeZone</code>; IP timezone comes from platform metadata. It is an untrusted client signal, not VPN or identity attestation. With VPN blocking, only Radar <code>ACCESS_ISP</code> classification proceeds; a browser/edge RTT difference above 50 ms, unknown timezones, or unverifiable data denies access. A pre-challenge denial sends no probe.</p>
+<p>Browser timezone comes from <code>Intl.DateTimeFormat().resolvedOptions().timeZone</code>; IP timezone comes from platform metadata. It is an untrusted client signal, not VPN or identity attestation. With VPN blocking, only ASNs classified as <code>ACCESS_ISP</code> or <code>ORGANIZATION</code> by Radar proceed; a browser/edge RTT difference above 50 ms, unknown timezones, or unverifiable data denies access. A pre-challenge denial sends no probe.</p>
 <p>The <code>Accept</code> header changes only the <strong>success representation</strong>, not the form body or authorization:</p>
 <div class="table-scroll" tabindex="0"><table>
 <thead>
@@ -5073,7 +5073,7 @@ main().catch(error =&gt; { console.error(error.message); process.exitCode = 1; }
 <p>Editors can change their own links. Interactive Admins and Owners can maintain all links. Owners alone manage users and site settings. Disabling a user blocks later logins and token authentication, but does not automatically disable that user&#39;s existing public links. See the <a href="#en-guide-permissions">role table</a>.</p>
 <h2 id="en-security-passwords-and-browser-checks">Passwords and browser checks<a class="heading-link" href="#en-security-passwords-and-browser-checks" aria-label="Link to section">#</a></h2>
 <p>A link password is stored as a salted PBKDF2-SHA256 verifier with an HMAC pepper. The separate root secret, <code>LINK_PASSWORD_SECRET</code>, must match on both Workers. Preserve it during upgrades: replacing it affects verification of existing passwords. A successful unlock submits only to the short-link site and returns to the same-origin short code; it does not forward the password body to the destination.</p>
-<p>Browser timezone is self-reported and can be changed by the visitor. IP timezone, ASN, and the Tor marker come from Cloudflare metadata. Per-link <code>block_vpn</code> also requires Radar&#39;s <code>ACCESS_ISP</code> classification and a authenticated single-probe RTT check. Unknown or unverifiable information is denied under that policy. Travel, system settings, corporate networks, campus networks, geolocation mistakes, and network delays can all cause legitimate visitors to be rejected. This is a heuristic access policy, not proof of a person&#39;s identity or reliable proof of VPN use.</p>
+<p>Browser timezone is self-reported and can be changed by the visitor. IP timezone, ASN, and the Tor marker come from Cloudflare metadata. Per-link <code>block_vpn</code> requires Radar to classify the ASN as <code>ACCESS_ISP</code> or <code>ORGANIZATION</code> and requires an authenticated single-probe RTT check. Unknown or unverifiable information is denied under that policy. Travel, system settings, corporate networks, campus networks, geolocation mistakes, and network delays can all cause legitimate visitors to be rejected. This is a heuristic access policy, not proof of a person&#39;s identity or reliable proof of VPN use.</p>
 <p>Challenges and proofs last at most 120 seconds and are bound to the link rules, host, query, and network context. The final response clears the proof cookie. There is no server-side single-consumption table, so the valid context must not be described as absolutely replay-proof. Turning off global timezone collection does not turn off <code>block_vpn</code> on an individual link.</p>
 <h2 id="en-security-database-cache-and-counters">Database, cache, and counters<a class="heading-link" href="#en-security-database-cache-and-counters" aria-label="Link to section">#</a></h2>
 <p>D1 decides whether a request is authorized now. KV stores an allowlist of ordinary routing fields; it does not store password verifiers, text bodies, counters, or root secrets. Every cache hit still needs a D1 guard. If D1 fails, an old cache entry cannot grant access.</p>
@@ -5245,7 +5245,7 @@ npm run build:demo
 <p>The public pages use fingerprinted <code>password.css</code>, <code>password.js</code>, and <code>browser.js</code> asset URLs. A matching fingerprint can be cached for a year. Unversioned forms of those paths return the current content with <code>Cache-Control: no-store</code>.</p>
 <h2 id="en-protocol-follow-the-visitor-flow">Follow the visitor flow<a class="heading-link" href="#en-protocol-follow-the-visitor-flow" aria-label="Link to section">#</a></h2>
 <p>Password unlock and browser verification return 200 JSON to the built-in same-origin page script, or 303 to a regular form. Both return to the same short-link site. The resumed GET performs current checks before returning a destination or text. Their successful intermediate responses are not successful-click events and do not consume the link&#39;s finite request quota.</p>
-<p>For a VPN-protected link, Tor and Radar ASN checks run before the password page. Only <code>ACCESS_ISP</code> classification proceeds. An eligible challenge sends one same-origin RTT probe. A network denial before the challenge produces a 403 result page without a probe. Both protection pages support Chinese and English.</p>
+<p>For a VPN-protected link, Tor and Radar ASN checks run before the password page. Only ASNs classified as <code>ACCESS_ISP</code> or <code>ORGANIZATION</code> proceed. An eligible challenge sends one same-origin RTT probe. A network denial before the challenge produces a 403 result page without a probe. Both protection pages support Chinese and English.</p>
 <h2 id="en-protocol-upgrade-without-renaming-working-resources">Upgrade without renaming working resources<a class="heading-link" href="#en-protocol-upgrade-without-renaming-working-resources" aria-label="Link to section">#</a></h2>
 <p>v1.0.2 preserves v1.0.1 API paths, token hashes, visitor-cookie formats, KV keys, CSV markers, and database structure. Existing credentials remain subject to their normal expiry, revocation, and rule checks. Keep Worker names, bindings, and root-secret values unchanged unless you are deliberately migrating them.</p>
 <p>All six database migrations, <code>0001</code> through <code>0006</code>, are included. Check the target database and apply only its pending migrations. A database already containing all six needs no extra migration solely for this patch release.</p>

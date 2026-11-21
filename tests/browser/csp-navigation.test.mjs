@@ -102,12 +102,13 @@ test('Chromium CSP navigation regression (real engine, loopback Worker/SQLite fi
     assert.deepEqual(f.visits.filter(v=>v.method==='POST').map(v=>[v.status,v.accept]),[[401,'application/json'],[200,'application/json']]);
     assert.deepEqual(f.targetVisits,[{path:'/done',method:'GET'}]); assert.equal(f.count(),1); assert.equal(f.events.filter(e=>e.doubles[0]===1).length,1);
   });
-  await t.test('password + block_vpn completes scripted unlock then browser collection', async sub => {
-    const { f, p } = await fixture(sub, { password: true, code: 301 });
+  await t.test('ORGANIZATION completes password unlock and one RTT probe before redirecting', async sub => {
+    const { f, p } = await fixture(sub, { password: true, code: 301, category: 'ORGANIZATION' });
     await p.navigate(f.shortOrigin + '/csp-check');
     await until(() => p.evaluate("document.readyState === 'complete' && !!document.querySelector('input[name=password]')"), 'Password page was not ready');
     await p.evaluate(`document.querySelector('input[name=password]').value=${JSON.stringify(TEST_PASSWORD)};document.querySelector('form').requestSubmit();`);
     await landed(f, p); assert.deepEqual(await cspErrors(p), []); assert.equal(f.count(), 1);
+    assert.equal(f.visits.filter(v => v.method === 'POST' && v.path === '/__Linro_rtt' && v.status === 200).length, 1);
     const posts = f.visits.filter(v => v.method === 'POST' && v.path !== '/__Linro_rtt');
     assert.deepEqual(posts.map(p => p.status), [200, 200]); assert.equal(posts[0].accept, 'application/json'); assert.equal(posts[1].accept, 'application/json');
     assert.equal(posts[0].site, 'same-origin'); assert.equal(f.events.filter(e => e.doubles[0] === 1).length, 1);
@@ -156,8 +157,8 @@ test('Chromium CSP navigation regression (real engine, loopback Worker/SQLite fi
     assert.equal(f.count(), 0);
     assert.deepEqual(await cspErrors(p), []);
   });
-  await t.test('one slow probe denies a matching-timezone ISP visit without spending quota', async sub => {
-    const { f, p } = await fixture(sub, { probeDelay: 100 });
+  await t.test('one slow probe denies a matching-timezone ORGANIZATION visit without spending quota', async sub => {
+    const { f, p } = await fixture(sub, { probeDelay: 100, category: 'ORGANIZATION' });
     await p.navigate(f.shortOrigin + '/csp-check');
     await until(() => p.evaluate("document.getElementById('browser-error')?.hidden === false"), 'Latency denial missing');
     assert.equal(f.visits.filter(v => v.path === '/__Linro_rtt' && v.status === 200).length, 1);

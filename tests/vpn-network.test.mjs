@@ -335,15 +335,15 @@ test('only trusted ASN metadata selects the lookup, and unprotected links do not
   assert.equal(upstream.mock.callCount(), 0);
 });
 
-for (const category of ['HOSTING_CLOUD_CONTENT', 'ORGANIZATION', null]) {
+for (const category of ['HOSTING_CLOUD_CONTENT', 'UNKNOWN_CATEGORY', null]) {
   test('ASN policy denies ' + category + ' before issuing a page, proof or redirect', async (t) => {
-    const f = await fixture(t, { block_vpn: true });
+    const f = await fixture(t, { block_vpn: true }, { env: { RADAR_API_TOKEN: newTestSecret() } });
     t.mock.method(globalThis, 'fetch', () => Response.json(radarBody(category)));
     const r = await send(f, '/docs');
     assert.equal(r.status, 403);
     assert.equal(r.headers.get('location'), null);
     assert.equal(r.headers.get('set-cookie'), null);
-    assert.equal(f.events[0].blobs[9], category === null ? 'asn_unavailable' : 'asn_category');
+    assert.equal(f.events[0].blobs[9], category === 'HOSTING_CLOUD_CONTENT' ? 'asn_category' : 'asn_unavailable');
     assert.equal(count(f), 0);
   });
 }
@@ -511,7 +511,10 @@ test('the final protected request rechecks its ASN and rejects a timezone-only p
   const claims = await validateBrowserChallenge(token, request(), oldLink, f.env);
   const oldCookie = (await issueBrowserCookie(claims, 'Asia/Tokyo', oldLink, f.env)).split(';')[0];
   assert.equal((await send(f, resume, { headers: { cookie: oldCookie } })).status, 403);
-  upstream.mock.mockImplementation(() => Response.json(radarBody('ORGANIZATION')));
+  upstream.mock.mockImplementation(() => Response.json(radarBody('HOSTING_CLOUD_CONTENT')));
   assert.equal((await send(f, resume, { headers })).status, 403);
   assert.equal(count(f), 0);
+  upstream.mock.mockImplementation(() => Response.json(radarBody('ORGANIZATION')));
+  assert.equal((await send(f, resume, { headers })).status, 301);
+  assert.equal(count(f), 1);
 });

@@ -647,8 +647,8 @@ async function handle(request: Request, env: RedirectEnv, context?: Context): Pr
   if (link.block_vpn) {
     const observation = observeBrowser(request);
     const category = observation.tor ? null : await radarClassification(request, env);
-    if (category !== 'ACCESS_ISP') {
-      if (category === 'HOSTING_CLOUD_CONTENT' || category === 'ORGANIZATION') {
+    if (category !== 'ACCESS_ISP' && category !== 'ORGANIZATION') {
+      if (category === 'HOSTING_CLOUD_CONTENT') {
         observation.reason = 'asn_category';
         observation.suspected = true;
       } else if (!observation.tor) {

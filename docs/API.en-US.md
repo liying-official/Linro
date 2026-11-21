@@ -624,7 +624,7 @@ The same-origin form sends `challenge` and `timezone` once each to `/__Linro_bro
 
 The RTT endpoint itself takes `application/x-www-form-urlencoded` with exactly one `challenge`, applies the same-origin check, and accepts at most 4096 body bytes. Success returns the authenticated encrypted receipt as text, not JSON. Its receipt is bound to the challenge.
 
-Browser timezone comes from `Intl.DateTimeFormat().resolvedOptions().timeZone`; IP timezone comes from platform metadata. It is an untrusted client signal, not VPN or identity attestation. With VPN blocking, only Radar `ACCESS_ISP` classification proceeds; a browser/edge RTT difference above 50 ms, unknown timezones, or unverifiable data denies access. A pre-challenge denial sends no probe.
+Browser timezone comes from `Intl.DateTimeFormat().resolvedOptions().timeZone`; IP timezone comes from platform metadata. It is an untrusted client signal, not VPN or identity attestation. With VPN blocking, only ASNs classified as `ACCESS_ISP` or `ORGANIZATION` by Radar proceed; a browser/edge RTT difference above 50 ms, unknown timezones, or unverifiable data denies access. A pre-challenge denial sends no probe.
 
 The `Accept` header changes only the **success representation**, not the form body or authorization:
 

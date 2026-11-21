@@ -25,7 +25,7 @@ The public pages use fingerprinted `password.css`, `password.js`, and `browser.j
 
 Password unlock and browser verification return 200 JSON to the built-in same-origin page script, or 303 to a regular form. Both return to the same short-link site. The resumed GET performs current checks before returning a destination or text. Their successful intermediate responses are not successful-click events and do not consume the link's finite request quota.
 
-For a VPN-protected link, Tor and Radar ASN checks run before the password page. Only `ACCESS_ISP` classification proceeds. An eligible challenge sends one same-origin RTT probe. A network denial before the challenge produces a 403 result page without a probe. Both protection pages support Chinese and English.
+For a VPN-protected link, Tor and Radar ASN checks run before the password page. Only ASNs classified as `ACCESS_ISP` or `ORGANIZATION` proceed. An eligible challenge sends one same-origin RTT probe. A network denial before the challenge produces a 403 result page without a probe. Both protection pages support Chinese and English.
 
 ## Upgrade without renaming working resources
 
