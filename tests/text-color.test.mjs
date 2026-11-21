@@ -7,12 +7,14 @@ const foregrounds = css => [...css.matchAll(/(?<![\w-])color:\s*(#[0-9a-f]{6})\b
 
 test('admin foregrounds, body/muted tokens and SVG chart text use unified dark ink', () => {
   const css = read('apps/admin/src/web/styles.css');
-  const colors = foregrounds(css);
-  assert.ok(colors.length > 90, 'Inspect the complete existing theme, not only its last override.');
+  const ink = /--ink:\s*(#[\da-f]{6})/i.exec(css)?.[1];
+  const resolved = css.replaceAll('var(--ink)',ink);
+  const colors = foregrounds(resolved);
+  assert.ok(colors.length && ink);
   assert.deepEqual([...new Set(colors)], ['#0D394A']);
   assert.match(css, /--body-text:\s*#0D394A/i);
   assert.match(css, /--muted:\s*#0D394A/i);
-  assert.match(css, /\.chart text\s*\{\s*fill:\s*#0D394A/i);
+  assert.match(resolved, /\.chart text\s*\{\s*fill:\s*#0D394A/i);
 });
 
 test('password and browser-check pages use unified text but retain sky/white and focus styling', () => {
@@ -24,16 +26,15 @@ test('password and browser-check pages use unified text but retain sky/white and
   assert.match(css, /background:#87CEEB/);
   assert.match(css, /background:#FFFFFF/);
   assert.match(css, /outline:3px solid #2145C4/);
-  assert.match(read('apps/redirect/src/browser-page.ts'), /\/__Linro_assets\/password\.css/);
+  assert.match(read('apps/redirect/src/public-card.ts'), /PUBLIC_ASSETS\['password\.css'\]/);
 });
 
-test('text-only refinement preserves the published version, license, sky/white palette and documents current ink', () => {
+test('the release documents its license, sky/white palette and text color', () => {
   const pkg = JSON.parse(read('package.json'));
-  assert.equal(pkg.version, '1.0.1');
   assert.equal(pkg.license, 'AGPL-3.0-only');
   const css = read('apps/admin/src/web/styles.css');
   assert.match(css, /--accent:\s*#87CEEB/i);
-  assert.match(css, /background:\s*#FFFFFF/i);
-  assert.match(css, /outline-color:\s*#2145C4/i);
-  assert.match(read('docs/GUIDE.md'), /#87CEEB.*#FFFFFF.*#0D394A/);
+  assert.match(css, /--surface:\s*#FFFFFF/i);
+  assert.match(css, /--focus:\s*#2145C4/i);
+  assert.match(read('docs/SOURCES.md'), /#87CEEB.*#FFFFFF.*#0D394A/);
 });

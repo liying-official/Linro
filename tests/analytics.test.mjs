@@ -1,8 +1,9 @@
+import { newTestSecret } from './fixture-credentials.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setup, createLink, call } from './harness.mjs';
 import { stats, rollup } from '../.build/apps/admin/src/worker/analytics.js';
-const configured = { ANALYTICS_ENABLED: 'true', ANALYTICS_DATASET: 'cf_links_clicks', CLOUDFLARE_ACCOUNT_ID: 'a'.repeat(32), ANALYTICS_API_TOKEN: 'unit-test-not-a-real-secret' };
+const configured = { ANALYTICS_ENABLED: 'true', ANALYTICS_DATASET: 'fixture_clicks', CLOUDFLARE_ACCOUNT_ID: 'a'.repeat(32), ANALYTICS_API_TOKEN: newTestSecret() };
 function mockFetch(t, handler) { const original = globalThis.fetch; globalThis.fetch = handler; t.after(() => { globalThis.fetch = original; }); }
 const previousDate = () => new Date((Math.floor(Date.now() / 86400000) - 1) * 86400000).toISOString().slice(0, 10);
 test('unconfigured analytics is unavailable, not a fabricated zero-click success', async t => {
@@ -13,7 +14,7 @@ test('analytics generates sample-weighted SQL, UTC date grouping and a scoped fi
   const { env, domain } = await setup(configured); t.after(() => env.DB.close()); const link = await createLink(env, domain); const sqls = [];
   mockFetch(t, async (url, options) => {
     assert.equal(String(url), `https://api.cloudflare.com/client/v4/accounts/${'a'.repeat(32)}/analytics_engine/sql`);
-    assert.equal(options.headers.Authorization, 'Bearer unit-test-not-a-real-secret'); sqls.push(options.body);
+    assert.equal(options.headers.Authorization, 'Bearer ' + configured.ANALYTICS_API_TOKEN); sqls.push(options.body);
     return Response.json({ data: !options.body.includes('GROUP BY') ? [{ clicks: 17 }] : [] });
   });
   const result = await stats(env, 7, link.id);
@@ -28,7 +29,10 @@ test('provider query failures produce a visible 502 response', async t => {
 test('daily rollup executes actual UPSERT SQL, excludes deleted links and retries idempotently', async t => {
   const { env, domain } = await setup(configured); t.after(() => env.DB.close()); const link = await createLink(env, domain); const date = previousDate(); let clicks = 12;
   mockFetch(t, async () => Response.json({ data: [{ link_id: link.id, date, clicks }, { link_id: crypto.randomUUID(), date, clicks: 99 }] }));
-  await rollup(env); clicks = 18; await rollup(env);
+  await rollup(env); clicks = 18;
+  const later = Date.now() + 6 * 3600000;
+  t.mock.method(Date, 'now', () => later);
+  await rollup(env);
   const rows = env.DB.sqlite.prepare('SELECT * FROM daily_stats').all(); assert.equal(rows.length, 1); assert.equal(rows[0].clicks, 18);
   assert.ok(env.DB.sqlite.prepare("SELECT value FROM settings WHERE key='analytics_rollup_last_success'").get());
   assert.equal(env.DB.sqlite.prepare("SELECT count(*) AS n FROM settings WHERE key='analytics_rollup_cursor'").get().n, 0);

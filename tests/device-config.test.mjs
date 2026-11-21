@@ -11,7 +11,7 @@ const valid = { account_id: 'b'.repeat(32), database_id: '11111111-1111-4111-811
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
 async function isolated(t) {
-  const dir = await mkdtemp(join(tmpdir(), 'cf-links-v111-config-'));
+  const dir = await mkdtemp(join(tmpdir(), 'linro-device-config-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   await cp(new URL('scripts/', root), join(dir, 'scripts'), { recursive: true });
   return dir;
@@ -59,7 +59,7 @@ test('current analytics docs distinguish browser and IP timezones and do not pro
   assert.match(doc,/不是浏览器/); assert.match(doc,/CF-Device-Type/);
   assert.match(doc,/"cloudflare_device_type_enabled": false/);
   assert.match(doc,/none/); assert.match(doc,/blob6/); assert.match(doc,/blob7/);
-  assert.match(doc,/8.*顺序|八.*顺序/); assert.match(doc,/link_ids/);
+  assert.match(doc,/view=dashboard/); assert.match(doc,/10 秒上游时限/); assert.match(doc,/link_ids/);
 });
 test('text audit accepts the stored sentinel and public empty target without exposing content', () => {
   for (const target_url of ['about:blank','']) {
@@ -80,6 +80,7 @@ test('release requirements cover new migration, server validators and both GUI m
   // Build reviewed public fixtures in memory, as the release tests do.
   const templates = configs({ account_id: '1'.repeat(32), database_id: '11111111-1111-4111-8111-111111111111', admin_host: 'admin.example.com', redirect_hosts: ['go.example.com'], access_issuer: 'https://your-team.cloudflareaccess.com', access_aud: 'a'.repeat(64), owner_email: 'owner@example.com', analytics_enabled: false });
   templates.admin.account_id = templates.redirect.account_id = '0'.repeat(32);
+  templates.admin.vars.CLOUDFLARE_ACCOUNT_ID = templates.admin.account_id;
   templates.admin.vars.ACCESS_AUD = 'YOUR_ACCESS_APPLICATION_AUD';
   for (const [path, bytes] of [
     ['apps/admin/wrangler.jsonc', JSON.stringify(templates.admin,null,2)+'\n'],

@@ -1,3 +1,4 @@
+import { newTestSecret } from './fixture-credentials.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import admin from '../.build/apps/admin/src/worker/index.js';
@@ -35,7 +36,7 @@ class Statement {
 export function environment(overrides = {}) {
   return {
     DB: new SQLiteD1(), ENVIRONMENT: 'development', ADMIN_ORIGIN: 'http://127.0.0.1:8787',
-    BOOTSTRAP_OWNER_EMAIL: 'owner@example.com', LOCAL_DEV_TOKEN: 'local-development-test-token-not-for-production-0123456789',
+    BOOTSTRAP_OWNER_EMAIL: 'owner@example.com', LOCAL_DEV_TOKEN: newTestSecret(),
     ACCESS_ISSUER: 'https://test.cloudflareaccess.com', ACCESS_AUD: 'a'.repeat(64), ANALYTICS_ENABLED: 'false', BROWSER_TIMEZONE_ENABLED: 'false',
     ASSETS: { fetch: async () => new Response('<html>test asset</html>', { headers: { 'Content-Type': 'text/html' } }) },
     REDIRECT_LIMITER: { limit: async () => ({ success: true }) },

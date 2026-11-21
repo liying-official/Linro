@@ -1,7 +1,7 @@
 // TEST ENTRY ONLY: never imported by either production Worker or its config.
 // Miniflare intercepts the outbound network below workerd, not the JS fetch API.
 import { verifyAccess } from '../../packages/shared/src/access.js';
-import { queryAnalytics } from '../../apps/admin/src/worker/analytics.js';
+import { queryAnalytics, stats } from '../../apps/admin/src/worker/analytics.js';
 import { errorResponse, json } from '../../packages/shared/src/http.js';
 import type { Env } from '../../packages/shared/src/platform.js';
 export default {
@@ -13,6 +13,7 @@ export default {
         return json({ sub: claims.sub, email: claims.email });
       }
       if (new URL(request.url).pathname === '/analytics') return json(await queryAnalytics(env, 'SELECT 1 FORMAT JSON'));
+      if (new URL(request.url).pathname === '/dashboard') return json(await stats(env,7,null,'dashboard',request.signal));
       return new Response('Not Found', { status: 404 });
     } catch (error) { return errorResponse(error, 'native-runtime-test'); }
   },

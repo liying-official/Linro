@@ -1,3 +1,5 @@
+import { newTestSecret } from '../fixture-credentials.mjs';
+import {startLocalRuntime} from '../loopback-port.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +9,7 @@ import { createOutboundRouter } from './outbound-router.mjs';
 // Use the pinned tools bundled with Wrangler. Missing tools MUST fail the gate.
 // The official converter supplies the Miniflare 5 workers[] representation;
 // the deleted createFetchMock/fetchMock API is not used.
+const analyticsToken = newTestSecret();
 const { Miniflare, convertV4MiniflareOptions, build } = loadRuntimeToolchain();
 const bundled = await build({ entryPoints: [fileURLToPath(new URL('./worker.ts', import.meta.url))], bundle: true, format: 'esm', platform: 'browser', target: 'es2022', write: false });
 const script = bundled.outputFiles[0].text;
@@ -24,10 +27,10 @@ async function token(changes = {}) {
 }
 async function fixture(t) {
   const router = createOutboundRouter();
-  const mf = new Miniflare(convertV4MiniflareOptions({ cf: false, modules: true, script, compatibilityDate: '2026-09-15', outboundService: router.outboundService, bindings: {
-    ACCESS_ISSUER: issuer, ACCESS_AUD: aud, ANALYTICS_ENABLED: 'true', ANALYTICS_DATASET: 'cf_links_clicks',
-    CLOUDFLARE_ACCOUNT_ID: account, ANALYTICS_API_TOKEN: 'runtime-fixture-not-a-real-secret',
-  } }));
+  const mf = await startLocalRuntime(port => new Miniflare(convertV4MiniflareOptions({host:'127.0.0.1',port, cf: false, modules: true, script, compatibilityDate: '2026-09-15', compatibilityFlags: ['enable_request_signal'], outboundService: router.outboundService, bindings: {
+    ACCESS_ISSUER: issuer, ACCESS_AUD: aud, ANALYTICS_ENABLED: 'true', ANALYTICS_DATASET: 'fixture_clicks',
+    CLOUDFLARE_ACCOUNT_ID: account, ANALYTICS_API_TOKEN: analyticsToken,
+  } })));
   t.after(async () => { try { await mf.dispose(); } finally { router.assertComplete(); } });
   return { mf, router };
 }
@@ -56,10 +59,19 @@ test('workerd rejects malformed JWKS and keeps access fail-closed', { timeout: 6
 });
 test('workerd Analytics query uses native POST fetch and reads a successful result', { timeout: 60000 }, async t => {
   const { mf, router } = await fixture(t);
-  router.expect({ url: endpoint, method: 'POST', headers: { authorization: 'Bearer runtime-fixture-not-a-real-secret' }, body: 'SELECT 1 FORMAT JSON' }, { status: 200, body: '{"data":[{"ok":1}]}' });
+  router.expect({ url: endpoint, method: 'POST', headers: { authorization: 'Bearer ' + analyticsToken }, body: 'SELECT 1 FORMAT JSON' }, { status: 200, body: '{"data":[{"ok":1}]}' });
   const response = await mf.dispatchFetch('https://test.invalid/analytics', { redirect: 'manual' });
   assert.equal(response.status, 200); assert.deepEqual((await response.json()).data, [{ ok: 1 }]);
   router.assertComplete();
+});
+test('workerd dashboard uses one AE timeline query on two authorized stats calls in the same environment', {timeout:60000},async t=>{
+  const {mf,router}=await fixture(t);
+  router.expect({url:endpoint,method:'POST'},{status:200,body:'{"data":[{"date":"2026-11-18","clicks":5}]}'});
+  for(let i=0;i<2;i++){
+    const r=await mf.dispatchFetch('https://test.invalid/dashboard',{redirect:'manual'});
+    assert.equal(r.status,200);assert.equal((await r.json()).data.clicks,5);
+  }
+  assert.equal(router.calls.length,1);
 });
 for (const code of [301, 302, 303, 307, 308]) test(`workerd Analytics ${code} never forwards bearer credentials`, { timeout: 60000 }, async t => {
   const { mf, router } = await fixture(t); let followed = 0;

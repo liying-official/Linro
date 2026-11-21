@@ -1,8 +1,11 @@
+import { newTestSecret } from './fixture-credentials.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { featureFixture, call, createLink, patch, request, row, count, unlock, cookie, PASSWORD, PEPPER, noTarget } from './feature-helpers.mjs';
 import { hashLinkPassword, verifyLinkPassword, validPasswordHash, hasUnlockCookie, issueUnlockCookie, UNLOCK_SECONDS } from '../.build/packages/shared/src/link-password.js';
-import { publicLocale } from '../.build/apps/redirect/src/public-pages.js';
+import { publicLocale, PASSWORD_JS } from '../.build/apps/redirect/src/public-pages.js';
+import { PUBLIC_ASSETS } from '../.build/apps/redirect/src/public-asset-paths.js';
+import vm from 'node:vm';
 import { exportCSV, parseCSV } from '../.build/apps/admin/src/web/csv.js';
 const EN='This link has reached its request limit. Please contact the administrator.';
 const ZH='此链接请求次数已到达上限，请联系管理员';
@@ -12,7 +15,7 @@ test('password verifier has a fresh salt, pepper-bound PBKDF2 and no plaintext; 
   assert.ok(validPasswordHash(a)); assert.notEqual(a,b); assert.ok(!a.includes(PASSWORD));
   assert.equal(await verifyLinkPassword(PASSWORD,a,env),true);
   assert.equal(await verifyLinkPassword('wrong but long password',a,env),false);
-  assert.equal(await verifyLinkPassword(PASSWORD,a,{LINK_PASSWORD_SECRET:'B'.repeat(43)}),false);
+  assert.equal(await verifyLinkPassword(PASSWORD,a,{LINK_PASSWORD_SECRET:newTestSecret()}),false);
   await assert.rejects(verifyLinkPassword(PASSWORD,'v1$pbkdf2-sha256$1$a$b',env),e=>e.code==='invalid_password_record');
 });
 test('setting passwords needs a secret and 12–128 non-control characters; invalid writes are not audited', async t => {
@@ -40,18 +43,23 @@ test('password page is bilingual, escaped, no-store and reveals no target; HEAD 
   const {env,domain}=await featureFixture(t); await createLink(env,domain,{password:PASSWORD});
   for(const [lang,text] of [['zh-CN','请输入访问密码'],['en','Enter the access password']]) {
     const r=await request(env,'/docs?_Linro_lang='+lang+'&x=%22%3E%3Cscript%3E'); await noTarget(r,200);
-    const body=await r.text(); assert.ok(body.includes(text)); assert.ok(!body.includes('https://example.org/docs')); assert.ok(!body.includes('<script>')); assert.ok(body.includes('/__Linro_assets/password.css'));
+    const body=await r.text(); assert.ok(body.includes(text)); assert.ok(!body.includes('https://example.org/docs')); assert.ok(!body.includes('<script>')); assert.ok(body.includes(PUBLIC_ASSETS['password.css']));
+    assert.deepEqual(body.match(/<script[^>]*>/g), ['<script src="'+PUBLIC_ASSETS['password.js']+'" defer>']);
     assert.match(r.headers.get('content-security-policy'),/default-src 'self'/);
     assert.doesNotMatch(r.headers.get('content-security-policy'),/unsafe-inline|unsafe-eval/);
   }
   const head=await request(env,'/docs',{method:'HEAD'}); await noTarget(head,200); assert.equal(await head.text(),'');
   const css=await request(env,'/__Linro_assets/password.css'); assert.equal(css.status,200); assert.match(css.headers.get('content-type'),/text\/css/);
+  const js=await request(env,'/__Linro_assets/password.js'); assert.equal(js.status,200); assert.match(js.headers.get('content-type'),/application\/javascript/); assert.equal(await js.text(),PASSWORD_JS);
 });
 for(const code of [301,302,307,308]) test(`password POST only redirects locally with 303; authenticated GET uses ${code} and no password body`, async t => {
   const {env,domain}=await featureFixture(t,{kv:true}); const link=await createLink(env,domain,{password:PASSWORD,redirect_code:code,max_redirects:2,cache_ttl:3600});
   const res=await unlock(env); assert.equal(res.status,303); assert.equal(res.headers.get('location'),'/docs'); assert.equal(count(env,link.id),0);
   assert.match(res.headers.get('set-cookie'),/HttpOnly/); assert.match(res.headers.get('set-cookie'),/SameSite=Lax/); assert.match(res.headers.get('set-cookie'),/Max-Age=900/);
-  const final=await request(env,'/docs',{headers:{cookie:cookie(res)}}); assert.equal(final.status,code); assert.equal(final.headers.get('location'),'https://example.org/docs'); assert.match(final.headers.get('cache-control'),/no-store/); assert.equal(count(env,link.id),1);
+  const modern=await unlock(env,'docs',PASSWORD,{accept:'application/json'},'?utm_source=fixture&_Linro_lang=en');
+  await noTarget(modern,200); assert.deepEqual(await modern.json(),{ok:true,data:{next:'/docs?utm_source=fixture&_Linro_lang=en'}});
+  assert.match(modern.headers.get('vary'),/Accept/); assert.match(modern.headers.get('content-security-policy'),/form-action 'self'/); assert.equal(count(env,link.id),0);
+  const final=await request(env,'/docs',{headers:{cookie:cookie(modern)}}); assert.equal(final.status,code); assert.equal(final.headers.get('location'),'https://example.org/docs'); assert.match(final.headers.get('cache-control'),/no-store/); assert.equal(count(env,link.id),1);
   const head=await request(env,'/docs',{method:'HEAD',headers:{cookie:cookie(res)}}); assert.equal(head.status,code); assert.equal(await head.text(),''); assert.equal(count(env,link.id),2);
 });
 test('incorrect password, malformed form, wrong origin and oversized body cannot spend quota or reveal Location', async t => {
@@ -59,11 +67,57 @@ test('incorrect password, malformed form, wrong origin and oversized body cannot
   await noTarget(await unlock(env,'docs','wrong password long enough'),401);
   await noTarget(await unlock(env,'docs',PASSWORD,{origin:'https://external.example'}),403);
   await noTarget(await unlock(env,'docs',PASSWORD,{'sec-fetch-site':'cross-site'}),403);
+  await noTarget(await unlock(env,'docs','wrong password long enough',{accept:'application/json'}),401);
+  await noTarget(await unlock(env,'docs',PASSWORD,{accept:'application/json',origin:'https://external.example'}),403);
   for(const [body,contentType,expected] of [['password=x&password=y','application/x-www-form-urlencoded',400],['password=x&extra=x','application/x-www-form-urlencoded',400],['{}','application/json',415],['password='+ 'a'.repeat(8200),'application/x-www-form-urlencoded',413]]) {
     await noTarget(await request(env,'/__Linro_unlock/docs',{method:'POST',headers:{origin:'https://go.example.com','content-type':contentType},body}),expected);
   }
   const missingOrigin=await request(env,'/__Linro_unlock/docs',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:'password='+PASSWORD}); await noTarget(missingOrigin,403);
   assert.equal(count(env,link.id),0);
+});
+
+// Controller security tests complement the real-browser navigation regression.
+function passwordScript(fetcher, action='https://go.example.com/__Linro_unlock/docs?utm_source=fixture') {
+  const requests=[], navigations=[], tasks=[], timers=new Map(); let id=0;
+  class HTMLInputElement { value=PASSWORD; }
+  const field=new HTMLInputElement(), wrong={hidden:true}, unavailable={hidden:true};
+  class HTMLFormElement {
+    action=action; attributes=new Map(); listeners=[];
+    elements={namedItem:name=>name==='password'?field:null};
+    addEventListener(_, listener){this.listeners.push(listener);}
+    setAttribute(k,v){this.attributes.set(k,v);} removeAttribute(k){this.attributes.delete(k);}
+    submit(){for(const listener of this.listeners)tasks.push(listener({preventDefault(){}}));}
+  }
+  const form=new HTMLFormElement();
+  const document={getElementById:name=>({'password-form':form,'password-error':wrong,'password-unavailable':unavailable})[name]};
+  Object.defineProperty(document,'cookie',{get(){throw Error('No script cookie access');}});
+  vm.runInNewContext(PASSWORD_JS,{HTMLFormElement,HTMLInputElement,document,URL,URLSearchParams,AbortController,
+    location:{origin:'https://go.example.com',href:'https://go.example.com/docs?utm_source=fixture',assign:next=>navigations.push(next)},
+    fetch:async(url,options)=>{requests.push({url,options});return fetcher(url,options);},
+    setTimeout:fn=>{timers.set(++id,fn);return id;},clearTimeout:key=>timers.delete(key),
+  },{timeout:1000});
+  return {form,field,wrong,unavailable,requests,navigations,timers,async settled(){await Promise.all(tasks.splice(0));}};
+}
+test('password script waits for user submission, blocks duplicate POSTs and only resumes the exact local GET',async()=>{
+  let release; const h=passwordScript(()=>new Promise(resolve=>{release=resolve;}));
+  assert.equal(h.requests.length,0); h.form.submit(); h.form.submit(); assert.equal(h.requests.length,1);
+  const {url,options}=h.requests[0]; assert.equal(url,h.form.action); assert.equal(options.body.get('password'),PASSWORD);
+  assert.equal(options.method,'POST'); assert.equal(options.redirect,'manual'); assert.equal(options.mode,'same-origin'); assert.equal(options.credentials,'same-origin');
+  release(Response.json({ok:true,data:{next:'/docs?utm_source=fixture'}}));await h.settled();
+  assert.deepEqual(h.navigations,['/docs?utm_source=fixture']);assert.equal(h.timers.size,0);
+});
+test('password script wrong-password retry clears stale errors without native retries',async()=>{
+  let attempts=0;const h=passwordScript(()=>++attempts===1?new Response('generic wrong password',{status:401}):Response.json({ok:true,data:{next:'/docs?utm_source=fixture'}}));
+  h.form.submit();await h.settled();assert.equal(h.wrong.hidden,false);assert.equal(h.requests.length,1);assert.deepEqual(h.navigations,[]);
+  h.form.submit();await h.settled();assert.equal(h.wrong.hidden,true);assert.equal(h.requests.length,2);assert.equal(h.navigations.length,1);
+});
+test('password script fails closed for external, altered, oversized or invalid success responses',async()=>{
+  const responses=[...['https://external.example/','//external.example/','/other','/docs?utm_source=changed','/docs?utm_source=fixture#x','/docs?utm_source=fixture\\x'].map(next=>()=>Response.json({ok:true,data:{next}})),
+    ()=>Response.json({ok:false,data:{next:'/docs?utm_source=fixture'}}),()=>new Response('x'.repeat(16385),{headers:{'content-type':'application/json'}}),
+    ()=>new Response('not json',{headers:{'content-type':'application/json'}}),()=>new Response(null,{status:303,headers:{location:'/docs'}}),
+    ()=>new Response('private server failure',{status:503}),()=>Promise.reject(Error('network'))];
+  for(const response of responses){const h=passwordScript(response);h.form.submit();await h.settled();assert.deepEqual(h.navigations,[]);assert.equal(h.unavailable.hidden,false);assert.equal(h.requests.length,1);assert.equal(h.timers.size,0);}
+  const h=passwordScript(()=>{throw Error('Must not fetch');},'https://external.example/__Linro_unlock/docs');h.form.submit();await h.settled();assert.equal(h.requests.length,0);assert.equal(h.unavailable.hidden,false);
 });
 test('password rate limit precedes expensive verification and uses one hashed IP bucket across slugs', async t => {
   const {env,domain}=await featureFixture(t); await createLink(env,domain,{password:PASSWORD}); await createLink(env,domain,{slug:'other',password:PASSWORD});
@@ -95,7 +149,7 @@ test('unlock cookie is bound to host, link, revision, signature and expiry; dupl
 test('password changes revoke old cookies; removal is explicit and does not affect the limit counter', async t => {
   const {env,domain}=await featureFixture(t,{kv:true}); const link=await createLink(env,domain,{password:PASSWORD,max_redirects:4});
   const c=cookie(await unlock(env)); assert.equal((await request(env,'/docs',{headers:{cookie:c}})).status,301);
-  await patch(env,link,{password:'another long fixture password'});
+  await patch(env,link,{password:newTestSecret()});
   await noTarget(await request(env,'/docs',{headers:{cookie:c}}),200); await noTarget(await unlock(env),401);
   await patch(env,link,{password:null}); assert.equal((await request(env)).status,301); assert.equal(count(env,link.id),2);
 });
@@ -152,7 +206,7 @@ test('quota conditional write refuses configuration changes racing an authorized
 });
 test('an ordinary PATCH never replaces a concurrently advanced counter with its earlier snapshot',async t=>{
   const {env,domain}=await featureFixture(t); const link=await createLink(env,domain,{max_redirects:4}); const original=env.DB.batch.bind(env.DB); let fired=false;
-  env.DB.batch=async statements=>{if(!fired && statements[0].sql?.startsWith('UPDATE links SET domain_id=')){fired=true;env.DB.sqlite.prepare('UPDATE links SET redirect_count=redirect_count+1 WHERE id=?').run(link.id);}return original(statements);};
+  env.DB.batch=async statements=>{if(!fired && statements.some(s=>s.sql?.startsWith('UPDATE links SET domain_id='))){fired=true;env.DB.sqlite.prepare('UPDATE links SET redirect_count=redirect_count+1 WHERE id=?').run(link.id);}return original(statements);};
   await patch(env,link,{title:'simultaneous edit'}); assert.equal(count(env,link.id),1);
 });
 test('counter commit ambiguity is never retried or allowed fail-open; consumption is conservative',async t=>{

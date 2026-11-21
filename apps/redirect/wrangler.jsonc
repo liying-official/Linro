@@ -25,7 +25,7 @@
   ],
   "vars": {
     "SOURCE_URL": "",
-    "BROWSER_TIMEZONE_ENABLED": "true",
+    "BROWSER_TIMEZONE_ENABLED": "false",
     "CLOUDFLARE_DEVICE_TYPE_ENABLED": "false",
     "REDIRECT_CACHE_TTL": "300",
     "QUERY_FORWARD_ALLOWLIST": "[\"utm_source\",\"utm_medium\",\"utm_campaign\",\"utm_term\",\"utm_content\"]",

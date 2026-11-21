@@ -1,13 +1,31 @@
+import { newTestSecret, testPassword } from './fixture-credentials.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fixture, challenge, submit, send, count, current, patch } from './browser-fixture.mjs';
-import { prefersJSON } from '../.build/apps/redirect/src/browser-page.js';
+import { browserDenied, prefersJSON } from '../.build/apps/redirect/src/browser-page.js';
 import { scriptHarness } from './browser-script-harness.mjs';
 import { deniedOrigins, deniedOriginsNodeOnly } from './unlock-cases.mjs';
 import { isSameOriginUnlock } from '../.build/apps/redirect/src/unlock-origin.js';
 
-for (const kv of [false, true]) for (const mode of ['redirect', 'text']) test(`D4 JSON ${mode} success shares the legacy proof and cannot spend quota; KV=${kv}`, async t => {
+test('the server-rendered denial provides a working language link without JavaScript', async () => {
+  const url = 'https://go.example.com/docs?ref=a%26b&_Linro_check=1&_Linro_lang=zh-CN';
+  const render = href => browserDenied(new Request(href, { headers: { accept: 'text/html' } }), 'invalid', 'docs');
+  const first = await render(url).text();
+  const destination = new URL(/hreflang="en" href="([^"]+)"/.exec(first)[1].replaceAll('&amp;', '&'), url);
+  assert.equal(destination.pathname, '/docs');
+  assert.deepEqual([...destination.searchParams], [['ref', 'a&b'], ['_Linro_lang', 'en']]);
+  const second = render(destination);
+  assert.equal(second.status, 403);
+  assert.equal(second.headers.get('content-language'), 'en');
+  assert.equal(second.headers.get('set-cookie'), null);
+  assert.match(await second.text(), /<html lang="en">/);
+  const protocol = browserDenied(new Request(url, { method: 'POST', headers: { accept: 'application/json' } }), 'invalid', 'docs');
+  assert.equal(protocol.status, 403);
+  assert.match(protocol.headers.get('content-type'), /text\/plain/);
+});
+
+for (const kv of [false, true]) for (const mode of ['redirect', 'text']) test(`JSON ${mode} success shares the legacy proof and cannot spend quota; KV=${kv}`, async t => {
   const f = await fixture(t, { block_vpn: true, ...(mode === 'text' ? { response_mode: 'text', text_content: 'private body <script>literal</script>', target_url: '' } : {}) }, { kv });
   const c = await challenge(f, '/docs?utm_source=test&_Linro_lang=zh-CN');
   const path = '/__Linro_browser/docs?utm_source=test&_Linro_lang=zh-CN';
@@ -42,19 +60,19 @@ for (const [accept, expected] of [
   ['application/json;q=1.000', true], ['application/json;q=1.1', false],
   ['application/json;q=no', false], ['application/json;q=0;q=1', false],
   ['application/json-bogus', false], ['application/*', false], ['application/problem+json', false],
-]) test(`D4 explicit JSON negotiation: ${accept}`, () => {
+]) test(`explicit JSON negotiation: ${accept}`, () => {
   const r = new Request('https://go.example.com/', { headers: accept === null ? {} : { accept } });
   assert.equal(prefersJSON(r), expected);
 });
 
-for (const [name, headers] of [...deniedOrigins, ...deniedOriginsNodeOnly]) test(`D4 JSON keeps origin rejection: ${name}`, async t => {
+for (const [name, headers] of [...deniedOrigins, ...deniedOriginsNodeOnly]) test(`JSON keeps origin rejection: ${name}`, async t => {
   const f = await fixture(t, { block_vpn: true }); const c = await challenge(f);
   const r = await send(f, '/__Linro_browser/docs', { method: 'POST', headers: { ...headers, accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ challenge: c.token, timezone: 'Asia/Tokyo' }).toString() });
   assert.equal(r.status, 403); assert.equal(r.headers.get('set-cookie'), null); assert.equal(r.headers.get('location'), null);
   assert.equal(count(f), 0); assert.equal(f.events.length, 0);
 });
 
-for (const kind of ['mismatch', 'unknown', 'tor', 'forged', 'revision', 'query', 'missing-password', 'rate-limit', 'database']) test(`D4 JSON representation cannot override ${kind} failure`, async t => {
+for (const kind of ['mismatch', 'unknown', 'tor', 'forged', 'revision', 'query', 'missing-password', 'rate-limit', 'database']) test(`JSON representation cannot override ${kind} failure`, async t => {
   const f = await fixture(t, { block_vpn: true }); const c = await challenge(f);
   let token = c.token, tz = 'Asia/Tokyo', path = '/__Linro_browser/docs', options = { headers: { accept: 'application/json' } }, expected = 403;
   if (kind === 'mismatch') tz = 'Europe/London';
@@ -63,7 +81,7 @@ for (const kind of ['mismatch', 'unknown', 'tor', 'forged', 'revision', 'query',
   if (kind === 'forged') token = token.slice(0, -8) + 'tampered';
   if (kind === 'revision') await patch(f, { title: 'Invalidate outstanding challenge' });
   if (kind === 'query') path += '?different=1';
-  if (kind === 'missing-password') await patch(f, { password: 'test-new-password-for-f1' });
+  if (kind === 'missing-password') await patch(f, { password: newTestSecret() });
   if (kind === 'rate-limit') { f.env.REDIRECT_LIMITER = { limit: async () => ({ success: false }) }; expected = 429; }
   if (kind === 'database') { f.env.DB.prepare = () => { throw Error('DB test failure'); }; expected = 503; }
   const r = await submit(f, token, tz, path, options);
@@ -71,9 +89,9 @@ for (const kind of ['mismatch', 'unknown', 'tor', 'forged', 'revision', 'query',
   assert.equal(count(f), 0); assert.ok(f.events.every(e => e.doubles[0] === 0));
 });
 
-test('D4 JSON after password unlock requires both proofs and rechecks current D1', async t => {
-  const f = await fixture(t, { block_vpn: true, password: 'test-long-password-f1' }, { kv: true });
-  const unlock = await send(f, '/__Linro_unlock/docs', { method: 'POST', headers: { origin: 'null', 'sec-fetch-site': 'same-origin', 'content-type': 'application/x-www-form-urlencoded' }, body: 'password=test-long-password-f1' });
+test('JSON after password unlock requires both proofs and rechecks current D1', async t => {
+  const f = await fixture(t, { block_vpn: true, password: testPassword }, { kv: true });
+  const unlock = await send(f, '/__Linro_unlock/docs', { method: 'POST', headers: { origin: 'null', 'sec-fetch-site': 'same-origin', 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({password: testPassword}).toString() });
   assert.equal(unlock.status, 303); const pw = unlock.headers.get('set-cookie').split(';')[0];
   const c = await challenge(f, '/docs', { headers: { cookie: pw } });
   const r = await submit(f, c.token, 'Asia/Tokyo', '/__Linro_browser/docs', { headers: { cookie: pw, accept: 'application/json' } });
@@ -140,7 +158,7 @@ test('script bounds a stalled request and cleans its timer', async () => {
   await h.settled(); assert.equal(h.forms.length, 1); assert.equal(h.navigations.length, 0); assert.equal(h.timers.size, 0);
 });
 
-test('D3 Node retains and rejects empty Origin separately from native-expressible cases', () => {
+test('Node retains and rejects empty Origin separately from native-expressible cases', () => {
   assert.ok(deniedOriginsNodeOnly.length >= 1);
   assert.ok(deniedOrigins.every(([, headers]) => headers.origin === undefined || headers.origin.trim() !== ''));
   for (const [, headers] of deniedOriginsNodeOnly) {

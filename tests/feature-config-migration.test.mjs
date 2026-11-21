@@ -1,3 +1,4 @@
+import { testPassword } from './fixture-credentials.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, cp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
@@ -10,6 +11,7 @@ import { configs, validateConfig } from '../scripts/config-lib.mjs';
 import { SQLiteD1 } from './harness.mjs';
 import { featureFixture, call, createLink, patch, row, request, PASSWORD } from './feature-helpers.mjs';
 import { exportCSV, parseCSV } from '../.build/apps/admin/src/web/csv.js';
+import { readWebSource } from './web-source.mjs';
 const require=createRequire(import.meta.url),ts=require('typescript');
 const valid={account_id:'c'.repeat(32),database_id:'11111111-1111-4111-8111-111111111111',admin_host:'admin.example.com',redirect_hosts:['go.example.com'],access_issuer:'https://test.cloudflareaccess.com',access_aud:'d'.repeat(64),owner_email:'owner@example.com'};
 async function temp(t){const dir=await mkdtemp(join(tmpdir(),'cf-links-feature-config-'));t.after(()=>rm(dir,{recursive:true,force:true}));await cp(new URL('../scripts/',import.meta.url),join(dir,'scripts'),{recursive:true});return dir;}
@@ -48,7 +50,7 @@ test('malformed existing password secrets are refused rather than silently regen
   const dir=await temp(t);await mkdir(join(dir,'.local'));const value='LINK_PASSWORD_SECRET="short"\n';await writeFile(join(dir,'.local','.dev.vars'),value);
   const r=spawnSync(process.execPath,['scripts/local-init.mjs'],{cwd:dir,encoding:'utf8'});assert.equal(r.status,1);assert.equal(await readFile(join(dir,'.local','.dev.vars'),'utf8'),value);
 });
-test('0002 migration preserves old links/users/domains/default codes and adds safe opt-out defaults',()=>{
+test('0002 migration preserves existing links, users, domains and default codes and adds safe opt-out defaults',()=>{
   const db=new SQLiteD1(':memory:',false);try{
     db.sqlite.exec(readFileSync(new URL('../migrations/0001_initial.sql',import.meta.url),'utf8'));
     db.sqlite.exec("INSERT INTO users(id,email,role,created_at,updated_at) VALUES('owner','owner@example.com','owner',1,1); INSERT INTO domains(id,hostname,default_redirect_code,created_at,updated_at) VALUES('domain','go.example.com',302,1,1); INSERT INTO links(id,domain_id,slug,target_url,created_by,created_at,updated_at,redirect_code) VALUES('link','domain','docs','https://example.org/','owner',1,1,301);");
@@ -74,7 +76,7 @@ test('new controls are subject to existing Editor ownership checks, including re
 test('CSV retains geo arrays and read-only control metadata but excludes any password field/hash',async t=>{
   const {env,domain}=await featureFixture(t);const rules=[{kind:'country',code:'JP',target_url:'https://japan.example.org/?x=1,2'}];
   const link=await createLink(env,domain,{geo_rules:rules,password:PASSWORD,max_redirects:10});
-  const csv=exportCSV([{...link,password:'should never export',password_hash:row(env,link.id).password_hash}]);assert.ok(!csv.includes('should never export'));assert.ok(!csv.includes('pbkdf2'));
+  const csv=exportCSV([{...link,password:testPassword,password_hash:row(env,link.id).password_hash}]);assert.ok(!csv.includes(testPassword));assert.ok(!csv.includes('pbkdf2'));
   const parsed=parseCSV(csv)[0];assert.deepEqual(JSON.parse(parsed.geo_rules),rules);assert.equal(parsed.password_protected,'true');assert.equal(parsed.max_redirects,'10');
 });
 test('all new GUI option keys exist in both dictionaries with the same shape',()=>{
@@ -85,8 +87,8 @@ test('all new GUI option keys exist in both dictionaries with the same shape',()
   assert.deepEqual(shape(exports.optionLabels['zh-CN']),shape(exports.optionLabels.en));for(const key of ['geo','regions','password','secretHint','limit','limitHint','count','reset','cache']) assert.ok(Object.hasOwn(exports.optionLabels.en,key),key);
 });
 test('new GUI fields are wired to FormData, protected imports cannot silently downgrade, and passwords never use storage',()=>{
-  const app=readFileSync(new URL('../apps/admin/src/web/App.tsx',import.meta.url),'utf8');const options=readFileSync(new URL('../apps/admin/src/web/LinkOptions.tsx',import.meta.url),'utf8');
-  assert.match(app,/<LinkOptions key=/);for(const key of ['geo_rules_json','max_redirects','password_action','reset_redirect_count'])assert.ok(app.includes(`values.get('${key}')`),key);
+  const app=readWebSource();const options=readFileSync(new URL('../apps/admin/src/web/LinkOptions.tsx',import.meta.url),'utf8');
+  assert.match(app,/<LinkOptions\s+key=/);for(const key of ['geo_rules_json','max_redirects','password_action','reset_redirect_count'])assert.ok(app.includes(`values.get('${key}')`),key);
   assert.match(app,/protectedExport && !row\.password/);assert.doesNotMatch(options,/localStorage|sessionStorage|dangerouslySetInnerHTML/);
-  assert.match(options,/type="password" name="password"/);assert.match(options,/value=\{JSON\.stringify\(textMode \? \[\] : rules\)\}/);
+  assert.match(options,/type="password"\s+name="password"/);assert.match(options,/value=\{JSON\.stringify\(textMode \? \[\] : rules\)\}/);
 });

@@ -1,3 +1,4 @@
+import {startLocalRuntime} from '../loopback-port.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadRuntimeToolchain } from '../../scripts/runtime-toolchain.mjs';
@@ -10,7 +11,7 @@ console.log('Native toolchain:', JSON.stringify(versions));
 test('Miniflare 5 API canary: /health, raw 303, and outboundService work without Internet', { timeout: 60000 }, async t => {
   const router = createOutboundRouter();
   router.expect({ url: 'https://upstream.invalid/ping' }, { status: 200, body: 'intercepted' });
-  const mf = new Miniflare(convertV4MiniflareOptions({
+  const mf = await startLocalRuntime(port => new Miniflare(convertV4MiniflareOptions({host:'127.0.0.1',port,
     cf: false, modules: true, compatibilityDate: '2026-09-15', outboundService: router.outboundService,
     script: `export default { async fetch(request) {
       const path = new URL(request.url).pathname;
@@ -18,7 +19,7 @@ test('Miniflare 5 API canary: /health, raw 303, and outboundService work without
       if (path === '/redirect') return Response.redirect('https://never-contact.invalid/target',303);
       return fetch('https://upstream.invalid/ping', {redirect:'manual'});
     } };`,
-  }));
+  })));
   t.after(async () => { try { await mf.dispose(); } finally { router.assertComplete(); } });
   const health = await mf.dispatchFetch('https://test.invalid/health', { redirect: 'manual' });
   assert.equal(health.status, 200); assert.deepEqual(await health.json(), { status: 'ok' });
@@ -34,13 +35,13 @@ test('Miniflare 5 API canary: /health, raw 303, and outboundService work without
 // matrix is reviewed. Do not silently relabel a dropped header as an empty one.
 test('native request-header fidelity: empty values are absent, nonempty values survive', { timeout: 60000 }, async t => {
   const router = createOutboundRouter(); // any unexpected egress is a test failure
-  const mf = new Miniflare(convertV4MiniflareOptions({
+  const mf = await startLocalRuntime(port => new Miniflare(convertV4MiniflareOptions({host:'127.0.0.1',port,
     cf: false, modules: true, compatibilityDate: '2026-09-15', outboundService: router.outboundService,
     script: `export default { fetch(request) {
       return Response.json(Object.fromEntries(['origin','x-probe','sec-fetch-site'].map(name =>
         [name, {present: request.headers.has(name), value: request.headers.get(name)}])));
     } };`,
-  }));
+  })));
   t.after(async () => { try { await mf.dispose(); } finally { router.assertComplete(); } });
   for (const empty of ['', ' ']) {
     const r = await mf.dispatchFetch('https://test.invalid/probe', { redirect: 'manual', method: 'POST',

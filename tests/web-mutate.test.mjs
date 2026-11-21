@@ -1,132 +1,199 @@
+import { newTestSecret } from './fixture-credentials.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-const require = createRequire(import.meta.url);
-const ts = require('typescript');
+import { renderToStaticMarkup } from 'react-dom/server';
+import { webController, deferred, settled, formEvent } from './web-controller.mjs';
 
-// Exercise the real mutate() source as a controller, not a React/DOM emulation.
-const filename = new URL('../apps/admin/src/web/App.tsx', import.meta.url);
-const source = ts.createSourceFile(filename.pathname, readFileSync(filename, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-const app = source.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'App');
-const method = app?.members.find(node => ts.isMethodDeclaration(node) && node.name.getText(source) === 'mutate');
-assert.ok(method, 'App.mutate must exist');
-const compiled = ts.transpileModule(`export const controller = { ${method.getText(source)} };`, {
-  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }, reportDiagnostics: true,
-});
-assert.equal(compiled.diagnostics?.length ?? 0, 0, 'mutate source must transpile');
-
-function controller(initial = {}, domainAPI = async () => [{ id: 'domain-refreshed' }]) {
-  const exports = {};
-  new Function('api', 'exports', compiled.outputText)(domainAPI, exports);
-  const instance = {
-    state: { busy: false, modal: null, error: 'old page error', modalError: 'old modal error', notice: '', selected: ['link-1'], locale: 'zh-CN', ...initial },
-    patches: [], loads: 0, messages: 0,
-    setState(patch) { this.patches.push(patch); Object.assign(this.state, patch); },
-    message(error) { this.messages++; return error instanceof Error ? error.message : '操作失败。'; },
-    ui() { return { common: { saved: '已保存。' } }; },
-    async loadPage() { this.loads++; },
-    mutate: exports.controller.mutate,
-  };
-  return instance;
-}
-
-test('mutation error updates use separate, explicitly keyed setState branches', () => {
-  const statement = method.body.statements.find(ts.isTryStatement);
-  const branch = statement?.catchClause?.block.statements.find(ts.isIfStatement);
-  assert.ok(branch?.elseStatement, 'Use if/else setState calls, not a conditional object spread (React 19 TS2345).');
-  const keys = block => {
-    const calls = [];
-    const walk = node => {
-      if (ts.isCallExpression(node) && node.expression.getText(source) === 'this.setState') calls.push(node);
-      ts.forEachChild(node, walk);
-    };
-    walk(block);
-    assert.equal(calls.length, 1, 'Each error branch must make exactly one update.');
-    const argument = calls[0].arguments[0];
-    assert.ok(ts.isObjectLiteralExpression(argument));
-    assert.ok(argument.properties.every(ts.isPropertyAssignment), 'No spread or cast to suppress the type error.');
-    return argument.properties.map(property => property.name.getText(source)).sort();
-  };
-  assert.deepEqual(keys(branch.thenStatement), ['busy', 'modalError']);
-  assert.deepEqual(keys(branch.elseStatement), ['busy', 'error']);
+const sampleToken = newTestSecret();
+test('a token is visible and copyable before list refresh, after failure, and after retrying the read', async () => {
+  const refresh = deferred();
+  let reads = 0;
+  const { app, calls } = webController({
+    state: { modal: { type: 'token' } },
+    request: (_, method) =>
+      method === 'POST'
+        ? { token: sampleToken }
+        : ++reads === 1
+          ? refresh.promise
+          : [{ id: 'created' }],
+  });
+  const form = formEvent({ name: 'tool', scopes: ['links:read'], days: '7' });
+  await app.submitToken(form);
+  assert.equal(app.state.mutationPending, false);
+  assert.deepEqual(app.state.modal, { type: 'secret', token: sampleToken });
+  const markup = () => renderToStaticMarkup(app.renderModal());
+  assert.match(markup(), new RegExp(`readonly=""[^>]*>${sampleToken}</textarea>`, 'i'));
+  assert.match(markup(), /Copy token/i);
+  refresh.reject(new Error('List unavailable'));
+  await settled();
+  assert.equal(app.state.error, 'List unavailable');
+  await app.submitToken(form);
+  await app.loadPage();
+  assert.ok(markup().includes(sampleToken));
+  assert.deepEqual(app.state.tokens, [{ id: 'created' }]);
+  assert.deepEqual(
+    calls.map(([path, method]) => [path, method]),
+    [
+      ['/tokens', 'POST'],
+      ['/tokens', 'GET'],
+      ['/tokens', 'GET'],
+    ],
+  );
+  app.closeModal();
+  assert.equal(app.state.modal, null);
 });
 
-test('modal rejection retains the modal, editable row and selection while clearing busy', async () => {
-  const modal = { type: 'link', row: { slug: 'docs', target_url: 'https://example.org/docs' } };
-  const instance = controller({ modal, importRows: [{ slug: 'pending' }] });
-  await instance.mutate(async () => { throw new Error('The hostname, slug, or email already exists.'); });
-  assert.equal(instance.state.modal, modal);
-  assert.equal(instance.state.modal.row.target_url, 'https://example.org/docs');
-  assert.deepEqual(instance.state.selected, ['link-1']);
-  assert.deepEqual(instance.state.importRows, [{ slug: 'pending' }]);
-  assert.equal(instance.state.modalError, 'The hostname, slug, or email already exists.');
-  assert.equal(instance.state.error, '');
-  assert.equal(instance.state.busy, false);
-  assert.equal(instance.state.notice, '');
-  assert.equal(instance.loads, 0);
-  assert.equal(instance.messages, 1);
+test('navigation, canceled reads and closing a dialog cannot release a pending write', async () => {
+  const write = deferred(),
+    summary = deferred(),
+    users = deferred();
+  const { app, calls } = webController({
+    state: { page: 'dashboard', modal: { type: 'link' }, session: { scopes: ['users:write'] } },
+    request: (path) =>
+      path === '/summary' ? summary.promise : path === '/users' ? users.promise : [],
+  });
+  const old = app.loadPage(),
+    pending = app.mutate('links', () => write.promise);
+  let duplicates = 0;
+  const another = () =>
+    app.mutate('tokens', async () => {
+      duplicates++;
+    });
+  await another();
+  app.closeModal();
+  assert.equal(app.state.modal.type, 'link');
+  await app.navigate('users', false);
+  assert.equal(calls[0][3].aborted, true);
+  users.resolve([]);
+  await settled();
+  assert.equal(app.state.pageLoading, false);
+  assert.equal(app.state.mutationPending, true);
+  await another();
+  app.closeModal();
+  summary.resolve({ links: 9 });
+  await old;
+  assert.equal(app.state.mutationPending, true);
+  assert.deepEqual(
+    calls.map(([path]) => path),
+    ['/summary', '/users'],
+  );
+  write.resolve();
+  await pending;
+  assert.equal(app.state.mutationPending, false);
+  await another();
+  assert.equal(duplicates, 1);
 });
 
-test('non-modal rejection appears in the page error rather than modalError', async () => {
-  const instance = controller();
-  await instance.mutate(async () => { throw new Error('Write failed'); });
-  assert.equal(instance.state.error, 'Write failed');
-  assert.equal(instance.state.modalError, '');
-  assert.equal(instance.state.busy, false);
-  assert.equal(instance.state.modal, null);
-  assert.equal(instance.messages, 1);
-});
-
-test('retry clears errors, retains the form during the request, then closes and refreshes on success', async () => {
-  const modal = { type: 'link', row: { slug: 'docs' } };
-  const instance = controller({ modal });
-  await instance.mutate(async () => { throw new Error('Duplicate'); });
-  await instance.mutate(async () => {
-    assert.equal(instance.state.busy, true);
-    assert.equal(instance.state.modal, modal);
-    assert.equal(instance.state.modalError, '');
-    assert.equal(instance.state.error, '');
-  }, '短链已创建。');
-  assert.equal(instance.state.modal, null);
-  assert.equal(instance.state.busy, false);
-  assert.equal(instance.state.notice, '短链已创建。');
-  assert.deepEqual(instance.state.selected, []);
-  assert.deepEqual(instance.state.domains, [{ id: 'domain-refreshed' }]);
-  assert.equal(instance.loads, 1);
-});
-
-test('busy state prevents duplicate writes without changing the active form', async () => {
-  const instance = controller({ busy: true, modal: { type: 'link' } });
+test('same-tick writes are guarded even before React commits its state', async () => {
+  const { app } = webController(),
+    updates = [],
+    write = deferred(),
+    commit = app.setState;
+  app.setState = (patch, cb) => updates.push(() => commit(patch, cb));
   let writes = 0;
-  await instance.mutate(async () => { writes++; });
-  assert.equal(writes, 0);
-  assert.equal(instance.patches.length, 0);
+  const submit = () =>
+    app.mutate('links', () => {
+      writes++;
+      return write.promise;
+    });
+  const first = submit();
+  await submit();
+  assert.equal(writes, 1);
+  assert.equal(app.state.mutationPending, false);
+  write.resolve();
+  await first;
+  await submit();
+  assert.equal(writes, 1);
+  while (updates.length) updates.shift()();
+  await submit();
+  assert.equal(writes, 2);
 });
 
-test('a synchronously thrown task error uses the same modal error path', async () => {
-  const instance = controller({ modal: { type: 'link' } });
-  await instance.mutate(() => { throw new Error('Synchronous error'); });
-  assert.equal(instance.state.modalError, 'Synchronous error');
-  assert.equal(instance.state.busy, false);
-  assert.equal(instance.messages, 1);
+test('failed mutations preserve editable forms and selection, and page failures stay visible', async () => {
+  const modal = { type: 'link', row: { slug: 'docs' } };
+  const { app, calls } = webController({
+    state: { modal, selected: ['docs'], importRows: [{ slug: 'pending' }] },
+  });
+  await app.mutate('links', () => {
+    throw new Error('Conflict');
+  });
+  assert.equal(app.state.modal, modal);
+  assert.deepEqual(app.state.selected, ['docs']);
+  assert.equal(app.state.modalError, 'Conflict');
+  assert.equal(app.state.mutationPending, false);
+  assert.equal(app.state.error, '');
+  app.closeModal();
+  await app.mutate('links', () => Promise.reject(new Error('Failed')));
+  assert.equal(app.state.error, 'Failed');
+  assert.equal(app.state.modalError, '');
+  assert.equal(calls.length, 0);
 });
 
-test('unknown rejection values are normalized once and leave retry possible', async () => {
-  const instance = controller({ modal: { type: 'domain' } });
-  await instance.mutate(async () => { throw null; });
-  assert.equal(instance.state.modalError, '操作失败。');
-  assert.equal(instance.state.busy, false);
-  assert.equal(instance.messages, 1);
+for (const [resource, page, expected] of [
+  ['links', 'links', ['/links']],
+  ['domains', 'domains', ['/domains']],
+  ['settings', 'settings', ['/settings']],
+  ['tokens', 'tokens', ['/tokens']],
+  ['users', 'users', ['/users']],
+  ['links', 'tokens', []],
+  ['domains', 'tokens', []],
+  ['links', 'dashboard', ['/summary', '/links']],
+])
+  test(`${resource} mutation on ${page} refreshes only affected resources`, async () => {
+    const { app, calls } = webController({
+      state: { page, analytics: { available: true } },
+      request: (path) => (path.startsWith('/links?') ? { items: [], next_cursor: null } : []),
+    });
+    await app.mutate(resource, async () => {}, 'Saved');
+    await settled();
+    assert.equal(app.state.notice, 'Saved');
+    assert.deepEqual(
+      calls.map(([url]) => url.split('?')[0]),
+      expected,
+    );
+    if (resource === 'domains' && page === 'tokens') {
+      assert.equal(app.state.directoryLoaded, false);
+      await app.navigate('links', false);
+      await settled();
+      assert.equal(calls[0][0], '/domains?view=directory');
+    }
+  });
+
+test('failed refresh preserves a successful write and read retries cannot replay it', async () => {
+  const { app, calls } = webController({
+    state: { page: 'domains', modal: { type: 'domain' } },
+    request: () => Promise.reject(new Error('List unavailable')),
+  });
+  let writes = 0;
+  await app.mutate(
+    'domains',
+    async () => {
+      writes++;
+    },
+    'Saved',
+  );
+  await settled();
+  assert.equal(app.state.modal, null);
+  assert.equal(app.state.error, 'List unavailable');
+  assert.equal(app.state.notice, 'Saved');
+  await app.loadPage();
+  assert.equal(writes, 1);
+  assert.equal(calls.length, 2);
 });
 
-test('a failed domain refresh after a successful write reports a page error without reopening the form', async () => {
-  const instance = controller({ modal: { type: 'link' } }, async () => { throw new Error('Refresh unavailable'); });
-  await instance.mutate(async () => {}, 'Saved');
-  assert.equal(instance.state.modal, null);
-  assert.equal(instance.state.notice, 'Saved');
-  assert.equal(instance.state.error, 'Refresh unavailable');
-  assert.equal(instance.state.modalError, '');
-  assert.equal(instance.state.busy, false);
-  assert.equal(instance.loads, 0);
+test('dashboard skips stats when canceled after recent links and otherwise requests the reduced view', async () => {
+  const links = deferred();
+  const { app, calls } = webController({
+    state: { page: 'dashboard' },
+    request: (path) => (path.startsWith('/links?') ? links.promise : {}),
+  });
+  const old = app.loadPage();
+  await settled();
+  await app.navigate('tokens', false);
+  links.resolve({ items: [] });
+  await old;
+  assert.ok(!calls.some(([path]) => path.startsWith('/stats')));
+  await app.navigate('dashboard', false);
+  await settled();
+  assert.ok(calls.some(([path]) => path === '/stats?days=7&view=dashboard'));
 });

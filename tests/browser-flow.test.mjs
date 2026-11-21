@@ -1,3 +1,4 @@
+import { testPassword } from './fixture-credentials.mjs';
 import test from 'node:test'; import assert from 'node:assert/strict';
 import { fixture, challenge, submit, complete, send, current, count, patch, defaultCF } from './browser-fixture.mjs';
 import { call, redirect } from './harness.mjs';
@@ -7,7 +8,7 @@ for(const kv of [false,true])for(const mode of ['redirect','text']){
  test(`${kv?'KV':'D1'} ${mode}: JS collection then final success consumes/logs exactly once`,async t=>{
   const f=await fixture(t,fields,{kv});const c=await challenge(f);
   assert.equal(c.response.headers.get('location'),null);assert.match(c.response.headers.get('content-security-policy'),/script-src 'self'/);
-  assert.doesNotMatch(c.html,/example\.org|secret plain text|unsafe-inline/);assert.match(c.html,/browser\.js/);assert.equal(count(f),0);assert.equal(f.events.length,0);
+  assert.doesNotMatch(c.html,/example\.org|secret plain text|unsafe-inline/);assert.match(c.html,/browser\.[0-9a-f]{16}\.js/);assert.equal(count(f),0);assert.equal(f.events.length,0);
   const p=await submit(f,c.token);assert.equal(p.status,303);assert.equal(count(f),0);assert.equal(f.events.length,0);
   const cookie=p.headers.get('set-cookie').split(';')[0];
   const r=await send(f,p.headers.get('location'),{headers:{cookie}});
@@ -36,9 +37,11 @@ test('without blocking a timezone mismatch succeeds and is recorded as suspected
  assert.equal(f.events[0].blobs[5],'Asia/Tokyo');assert.equal(f.events[0].blobs[8],'Europe/London');assert.equal(f.events[0].blobs[3],'initial.example');
  assert.doesNotMatch(out.response.headers.get('location'),/_Linro_check|_Linro_lang/);
 });
-for(const blocked of [false,true])for(const cf of [defaultCF,{country:'JP'},null])
+for(const blocked of [false,true])for(const cf of [defaultCF,{country:'JP',asn:defaultCF.asn,clientTcpRtt:12},null])
  test(`unknown JS/IP timezone with block=${blocked} CF=${JSON.stringify(cf)}`,async t=>{
-  const f=await fixture(t,{block_vpn:blocked});const c=await challenge(f,'/docs',{cf});const r=await submit(f,c.token,'','/__Linro_browser/docs',{cf});
+  const f=await fixture(t,{block_vpn:blocked});
+  if(blocked && !cf){const r=await send(f,'/docs',{cf});assert.equal(r.status,403);assert.equal(count(f),0);assert.deepEqual(f.events[0].blobs.slice(9),['asn_unavailable','unknown_blocked']);assert.equal(f.events[0].doubles[4],0);return;}
+  const c=await challenge(f,'/docs',{cf});const r=await submit(f,c.token,'','/__Linro_browser/docs',{cf});
   if(blocked){assert.equal(r.status,403);assert.equal(count(f),0);assert.deepEqual(f.events[0].doubles,[0,403,0,0,1,0,0]);}
   else {assert.equal(r.status,303);const result=await send(f,r.headers.get('location'),{cf,headers:{cookie:r.headers.get('set-cookie').split(';')[0]}});assert.equal(result.status,301);assert.equal(f.events[0].blobs[8],'none');assert.deepEqual(f.events[0].doubles,[1,301,0,0,0,1,0]);}
  });
@@ -46,6 +49,18 @@ for(const blocked of [false,true])test(`Cloudflare T1 directly suspected with bl
  const f=await fixture(t,{block_vpn:blocked});const cf={country:'T1',timezone:'Asia/Tokyo'};
  if(blocked){const r=await send(f,'/docs',{cf});assert.equal(r.status,403);assert.equal(count(f),0);assert.deepEqual(f.events[0].doubles,[0,403,1,1,0,0,1]);}
  else {const r=await complete(f,'Asia/Tokyo',{cf});assert.equal(r.response.status,301);assert.deepEqual(f.events[0].doubles,[1,301,1,0,0,0,1]);}
+});
+for (const env of [{ ANALYTICS_ENABLED:'false' }, { ANALYTICS:undefined }]) test('global timezone collection needs an enabled writer '+Object.keys(env)[0], async t=>{
+ const f=await fixture(t,{max_redirects:null},{kv:true,env:{...env,BROWSER_CHECK_SECRET:undefined}});
+ const plain=await send(f,'/docs'); assert.equal(plain.status,301); assert.equal(plain.headers.get('set-cookie'),null);
+ assert.ok(f.kv.gets>0); assert.equal(f.events.length,0);
+ f.env.BROWSER_CHECK_SECRET='b'.repeat(43);
+ await patch(f,{block_vpn:true});
+ delete f.env.BROWSER_CHECK_SECRET;
+ assert.equal((await send(f,'/docs')).status,503);
+ f.env.BROWSER_CHECK_SECRET='b'.repeat(43);
+ assert.ok((await challenge(f)).html.includes('name="latency"'));
+ assert.equal((await send(f,'/docs',{method:'HEAD'})).status,403);
 });
 test('per-link blocking requires browser check even when global collection is disabled; legacy unblocked is direct',async t=>{
  const f=await fixture(t,{}, {env:{BROWSER_TIMEZONE_ENABLED:'false'}});assert.equal((await send(f,'/docs')).status,301);f.events.length=0;
@@ -72,7 +87,7 @@ test('production cookie uses __Host prefix, Secure/HttpOnly; marker alone never 
 });
 for(const change of ['block','password','mode','disable','expiry','target'])test(`cached rule and old browser proof cannot bypass later ${change} update`,async t=>{
  const f=await fixture(t,{}, {kv:true});const c=await challenge(f);const p=await submit(f,c.token,'Europe/London');const old=new Map(f.kv.map);
- const values={block:{block_vpn:true},password:{password:'new-long-link-password'},mode:{response_mode:'text',text_content:'new secret text',target_url:'',geo_rules:[],query_mode:'discard'},disable:{enabled:false},expiry:{expires_at:Math.floor(Date.now()/1000)+1},target:{target_url:'https://new.example/new'}}[change];
+ const values={block:{block_vpn:true},password:{password:testPassword},mode:{response_mode:'text',text_content:'new secret text',target_url:'',geo_rules:[],query_mode:'discard'},disable:{enabled:false},expiry:{expires_at:Math.floor(Date.now()/1000)+1},target:{target_url:'https://new.example/new'}}[change];
  await patch(f,values);
  if(change==='expiry')f.env.DB.sqlite.prepare('UPDATE links SET expires_at=1 WHERE id=?').run(f.link.id);
  f.kv.map=old;
@@ -80,10 +95,10 @@ for(const change of ['block','password','mode','disable','expiry','target'])test
  assert.ok([200,403,404].includes(r.status));assert.equal(r.headers.get('location'),null);assert.doesNotMatch(await r.text(),/new secret text|new\.example|example\.org/);assert.equal(count(f),0);
 });
 test('password authorization precedes collection and remains required at final GET',async t=>{
- const f=await fixture(t,{block_vpn:true,password:'private-long-password'});
+ const f=await fixture(t,{block_vpn:true,password:testPassword});
  const first=await send(f,'/docs');assert.equal(first.status,200);assert.doesNotMatch(await first.text(),/name="challenge"/);
  const bad=await send(f,'/__Linro_browser/docs',{method:'POST',body:'timezone=Asia%2FTokyo&challenge=bad'});assert.equal(bad.status,403);
- const unlock=await send(f,'/__Linro_unlock/docs',{method:'POST',headers:{origin:'null','sec-fetch-site':'same-origin','content-type':'application/x-www-form-urlencoded'},body:'password=private-long-password'});
+ const unlock=await send(f,'/__Linro_unlock/docs',{method:'POST',headers:{origin:'null','sec-fetch-site':'same-origin','content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({password: testPassword}).toString()});
  assert.equal(unlock.status,303);const passwordCookie=unlock.headers.get('set-cookie').split(';')[0];
  const c=await challenge(f,'/docs',{headers:{cookie:passwordCookie}});const p=await submit(f,c.token,'Asia/Tokyo','/__Linro_browser/docs',{headers:{cookie:passwordCookie}});
  const proofCookie=p.headers.get('set-cookie').split(';')[0];assert.equal(count(f),0);assert.equal(f.events.length,0);

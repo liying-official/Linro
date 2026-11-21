@@ -27,6 +27,7 @@ async function fixture(t) {
     admin_host: 'admin.example.com', redirect_hosts: ['go.example.com'],
     access_issuer: 'https://your-team.cloudflareaccess.com', access_aud: 'a'.repeat(64), owner_email: 'owner@example.com', analytics_enabled: false });
   templates.admin.account_id = templates.redirect.account_id = '0'.repeat(32);
+  templates.admin.vars.CLOUDFLARE_ACCOUNT_ID = templates.admin.account_id;
   templates.admin.vars.ACCESS_AUD = 'YOUR_ACCESS_APPLICATION_AUD';
   for (const name of ['admin', 'redirect']) await writeFile(join(sourceRoot, `apps/${name}/wrangler.jsonc`), JSON.stringify(templates[name], null, 2) + '\n');
   return { dir, sourceRoot, outputDir: join(dir, 'out') };
@@ -49,7 +50,7 @@ test('source release stages every expected source with a fresh verified manifest
   assert.equal(rows.length, result.manifestEntries); assert.equal(result.totalFiles, rows.length + 1);
   assert.deepEqual(rows.map(row => row.name), rows.map(row => row.name).sort());
   for (const row of rows) assert.equal(digest(await readFile(join(result.path, row.name))), row.hash, row.name);
-  for (const name of ['README.md', 'README.en-US.md', 'docs/GUIDE.md', 'docs/GUIDE.en-US.md', 'docs/API.md', 'docs/API.en-US.md', 'apps/admin/src/web/App.tsx', 'apps/admin/src/web/i18n.ts', 'apps/redirect/src/index.ts', '.github/workflows/ci.yml', 'migrations/0001_initial.sql']) assert.ok(rows.some(row => row.name === name));
+  for (const name of ['.gitattributes', '.prettierrc.json', 'README.md', 'README.en-US.md', 'docs/GUIDE.md', 'docs/GUIDE.en-US.md', 'docs/API.md', 'docs/API.en-US.md', 'apps/admin/src/web/App.tsx', 'apps/admin/src/web/AppController.ts', 'apps/admin/src/web/i18n-dict.ts', 'apps/admin/src/web/pages/SettingsPage.tsx', 'apps/admin/src/web/i18n.ts', 'apps/redirect/src/index.ts', '.github/workflows/ci.yml', 'migrations/0001_initial.sql']) assert.ok(rows.some(row => row.name === name));
   assert.ok(!rows.some(row => row.name === 'MANIFEST.sha256'));
 });
 
@@ -59,7 +60,7 @@ test('build outputs, dependencies, local state, credentials and backup fixtures 
     '.build/apps/admin/src/worker/index.js', 'apps/admin/dist/index.html', 'apps/admin/dist/assets/main.js',
     'node_modules/react/index.js', '.local/state/data.sqlite', '.local/.dev.vars', '.wrangler/state.json',
     '.env', '.env.production', '.dev.vars', '.dev.vars.production', 'deployment.json', 'cf-links-backup.sql',
-    'release/old/README.md', 'coverage/coverage.json', 'docs/.env', 'docs/private.key',
+    'CHANGELOG.md', 'release/old/README.md', 'coverage/coverage.json', 'docs/.env', 'docs/private.key',
     'apps/admin/.dev.vars', 'apps/admin/state.db-wal', 'apps/admin/backup.sqlite-shm',
     'apps/admin/node_modules/pkg/leak.ts', 'tests/test-results/leak.json', 'unlisted-root.txt',
   ];

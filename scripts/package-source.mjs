@@ -1,5 +1,15 @@
 import { createHash } from 'node:crypto';
-import { lstat, readdir, readFile, writeFile, mkdir, mkdtemp, rename, rm, realpath } from 'node:fs/promises';
+import {
+  lstat,
+  readdir,
+  readFile,
+  writeFile,
+  mkdir,
+  mkdtemp,
+  rename,
+  rm,
+  realpath,
+} from 'node:fs/promises';
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -7,46 +17,131 @@ import { fileURLToPath } from 'node:url';
 // tests create .build/, Wrangler creates state, and deployment config may be private.
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const ROOT_FILES = [
-  '.editorconfig', '.gitignore', 'CHANGELOG.md', 'LICENSE', 'NOTICE', 'README.md', 'README.en-US.md', 'docs/.nojekyll',
-  'deployment.example.json', 'package.json', 'package-lock.json',
-  'tsconfig.web.json', 'tsconfig.worker.json', 'tsconfig.demo.json',
+  '.editorconfig',
+  '.gitattributes',
+  '.gitignore',
+  '.prettierignore',
+  '.prettierrc.json',
+  'LICENSE',
+  'NOTICE',
+  'README.md',
+  'README.en-US.md',
+  'docs/.nojekyll',
+  'deployment.example.json',
+  'package.json',
+  'package-lock.json',
+  'tsconfig.web.json',
+  'tsconfig.worker.json',
+  'tsconfig.demo.json',
 ];
-const ROOT_DIRS = ['.github', 'apps', 'packages', 'migrations', 'scripts', 'tests', 'examples', 'docs', 'LICENSES'];
+const ROOT_DIRS = [
+  '.github',
+  'apps',
+  'packages',
+  'migrations',
+  'scripts',
+  'tests',
+  'examples',
+  'docs',
+  'LICENSES',
+];
 const OMIT_DIRS = new Set([
-  'node_modules', '.build', '.local', '.wrangler', '.git', 'dist', 'release',
-  'evidence', 'history', 'previews', 'reports', 'repair-plans', 'coverage', 'test-results', 'playwright-report', '__pycache__',
+  'node_modules',
+  '.build',
+  '.local',
+  '.wrangler',
+  '.git',
+  'dist',
+  'release',
+  'evidence',
+  'history',
+  'previews',
+  'reports',
+  'repair-plans',
+  'coverage',
+  'test-results',
+  'playwright-report',
+  '__pycache__',
 ]);
 const EXTENSIONS = new Set([
-  '.ts', '.tsx', '.mjs', '.html', '.css', '.json', '.jsonc', '.sql', '.csv',
-  '.md', '.txt', '.png', '.yml', '.yaml',
+  '.ts',
+  '.tsx',
+  '.mjs',
+  '.html',
+  '.css',
+  '.json',
+  '.jsonc',
+  '.sql',
+  '.csv',
+  '.md',
+  '.txt',
+  '.png',
+  '.yml',
+  '.yaml',
 ]);
 const REQUIRED = [
-  'migrations/0004_browser_checks.sql', 'packages/shared/src/browser-check.ts', 'apps/redirect/src/browser-page.ts', 'apps/admin/src/web/VPNStats.tsx',
-  'apps/admin/src/worker/index.ts', 'apps/redirect/src/index.ts',
-  'apps/admin/src/web/App.tsx', 'apps/admin/src/web/main.tsx',
-  'apps/admin/src/web/i18n.ts', 'packages/shared/src/platform.ts',
-  'migrations/0003_text_responses.sql', 'packages/shared/src/text-response.ts', 'packages/shared/src/visitor-dimensions.ts', 'apps/admin/src/web/response-ui.ts', 'apps/admin/src/web/AnalyticsSelection.tsx',
-  'migrations/0001_initial.sql', 'migrations/0002_link_controls.sql', 'packages/shared/src/redirect-cache.ts', 'packages/shared/src/link-password.ts', 'packages/shared/src/geo.ts', 'scripts/package-source.mjs',
-  'docs/RELEASE.md', 'docs/LICENSING.md',
-  'apps/redirect/src/unlock-origin.ts', 'scripts/runtime-toolchain.mjs',
-  'scripts/check-deployment.mjs', 'scripts/verify-analytics-token.mjs',
-  'tests/runtime/api-canary.test.mjs', 'tests/runtime/outbound-router.mjs',
-  'tests/browser/chromium-cdp.mjs', 'tests/browser/csp-fixture.mjs', 'tests/browser/csp-navigation.test.mjs',
-  'tests/browser-f1.test.mjs', 'tests/browser-script-harness.mjs', 'tests/upgrade-migrations.test.mjs', 'tests/unlock-cases.mjs',
+  'migrations/0006_destination_hosts_and_archive.sql',
+  'tests/runtime/stats-disconnect-worker.ts',
+  'tests/runtime/stats-disconnect.test.mjs',
+  'apps/admin/src/worker/link-fields.ts',
+  'migrations/0005_link_kv_cache.sql',
+  'migrations/0004_browser_checks.sql',
+  'packages/shared/src/browser-check.ts',
+  'apps/redirect/src/browser-page.ts',
+  'apps/admin/src/web/VPNStats.tsx',
+  'apps/admin/src/worker/index.ts',
+  'apps/redirect/src/index.ts',
+  'apps/admin/src/web/App.tsx',
+  'apps/admin/src/web/main.tsx',
+  'apps/admin/src/web/i18n.ts',
+  'packages/shared/src/platform.ts',
+  'migrations/0003_text_responses.sql',
+  'packages/shared/src/text-response.ts',
+  'packages/shared/src/visitor-dimensions.ts',
+  'apps/admin/src/web/response-ui.ts',
+  'apps/admin/src/web/AnalyticsSelection.tsx',
+  'migrations/0001_initial.sql',
+  'migrations/0002_link_controls.sql',
+  'packages/shared/src/redirect-cache.ts',
+  'packages/shared/src/link-password.ts',
+  'packages/shared/src/geo.ts',
+  'scripts/package-source.mjs',
+  'docs/RELEASE.md',
+  'docs/LICENSING.md',
+  'apps/redirect/src/unlock-origin.ts',
+  'scripts/runtime-toolchain.mjs',
+  'scripts/check-deployment.mjs',
+  'scripts/verify-analytics-token.mjs',
+  'tests/runtime/api-canary.test.mjs',
+  'tests/runtime/outbound-router.mjs',
+  'tests/browser/chromium-cdp.mjs',
+  'tests/loopback-port.mjs',
+  'tests/browser/csp-fixture.mjs',
+  'tests/browser/csp-navigation.test.mjs',
+  'tests/browser-protocol.test.mjs',
+  'tests/browser-script-harness.mjs',
+  'tests/upgrade-migrations.test.mjs',
+  'tests/unlock-cases.mjs',
 ];
 // These three PUBLIC templates must stay byte-for-byte unchanged in a source
 // release. Refuse an initialized checkout instead of distributing real config
 // or silently overwriting the operator's working configuration.
 const TEMPLATE_SHA256 = {
-  'apps/admin/wrangler.jsonc': 'f5057661b5aaf0f9a2ab4d24c8aeb315cdc83297bc001ed36c3456a4452fbdd9',
-  'apps/redirect/wrangler.jsonc': '0527d7cc010bae25d22ed149b00a060397c14e50850c76b07a7807e2028d5fe8',
-  'deployment.example.json': '39cad600972cb00abdc2554ec566c027befe3c0c558d6f8e1242567af34a0f56',
+  'apps/admin/wrangler.jsonc': '129a29f405f07a91bd9df444810bb9dffec3609106f8eb86b05a5d7b0cf6a339',
+  'apps/redirect/wrangler.jsonc':
+    '24bf91730fa67d7f5f7d54e8248c3a2672a6162f2a5e078a110c292029992530',
+  'deployment.example.json': 'e8142c3510989ee5120054baa72e873a04cd2b52364fbaf65a4f70e01ba25590',
 };
-const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
-const posix = name => name.split(sep).join('/');
-const exists = async name => {
-  try { await lstat(name); return true; }
-  catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const posix = (name) => name.split(sep).join('/');
+const exists = async (name) => {
+  try {
+    await lstat(name);
+    return true;
+  } catch (error) {
+    if (error.code === 'ENOENT') return false;
+    throw error;
+  }
 };
 const inside = (root, name) => {
   const r = relative(root, name);
@@ -54,11 +149,19 @@ const inside = (root, name) => {
 };
 function omitFile(name) {
   const base = name.split('/').at(-1);
-  return base === 'deployment.json' || base === 'MANIFEST.sha256' ||
-    base === '.env' || base.startsWith('.env.') || base === '.dev.vars' || base.startsWith('.dev.vars.') ||
+  return (
+    base === 'deployment.json' ||
+    base === 'MANIFEST.sha256' ||
+    base === '.env' ||
+    base.startsWith('.env.') ||
+    base === '.dev.vars' ||
+    base.startsWith('.dev.vars.') ||
     /(?:\.db|\.sqlite|\.sqlite3)(?:-|$)/i.test(base) ||
     /(?:\.sql\.backup|\.bak|\.pem|\.key|\.p12|\.pfx)$/i.test(base) ||
-    (base === 'cf-links-backup.sql' || base === 'Linro-backup.sql' || base === 'linro-backup.sql');
+    base === 'cf-links-backup.sql' ||
+    base === 'Linro-backup.sql' ||
+    base === 'linro-backup.sql'
+  );
 }
 
 /** Stage a clean, manifest-verified source tree. No cloud operations or deletion
@@ -90,27 +193,41 @@ export async function stageSource({ sourceRoot = ROOT, outputDir } = {}) {
   }
   for (const name of ROOT_FILES) await collect(name, name !== 'package-lock.json');
   for (const name of ROOT_DIRS) await collect(name, true);
-  entries.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
-  const byName = new Map(entries.map(entry => [entry.name, entry]));
-  for (const name of REQUIRED) if (!byName.has(name)) throw new Error(`Missing required source: ${name}`);
+  entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const byName = new Map(entries.map((entry) => [entry.name, entry]));
+  for (const name of REQUIRED)
+    if (!byName.has(name)) throw new Error(`Missing required source: ${name}`);
   for (const [name, hash] of Object.entries(TEMPLATE_SHA256)) {
-    if (byName.get(name)?.hash !== hash) throw new Error(`Source release requires the unchanged public template: ${name}. Use a clean checkout; do not replace private working configuration.`);
+    if (byName.get(name)?.hash !== hash)
+      throw new Error(
+        `Source release requires the unchanged public template: ${name}. Use a clean checkout; do not replace private working configuration.`,
+      );
   }
   const manifest = JSON.parse(byName.get('package.json').bytes);
-  if (manifest.name !== 'linro' || !/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(manifest.version)) throw new Error('Invalid package name or release version.');
+  if (manifest.name !== 'linro' || !/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(manifest.version))
+    throw new Error('Invalid package name or release version.');
   const shared = byName.get('packages/shared/src/platform.ts').bytes.toString('utf8');
-  if (!shared.includes(`export const VERSION = '${manifest.version}';`)) throw new Error('Package/shared VERSION mismatch.');
+  if (!shared.includes(`export const VERSION = '${manifest.version}';`))
+    throw new Error('Package/shared VERSION mismatch.');
   if (byName.has('package-lock.json')) {
     const lock = JSON.parse(byName.get('package-lock.json').bytes);
-    if (lock.version !== manifest.version || lock.packages?.['']?.version !== manifest.version) throw new Error('Lockfile root version is stale. Preserve the lockfile and synchronize its root package metadata before release.');
-    if (lock.name !== manifest.name || (lock.packages[''].name ?? lock.name) !== manifest.name) throw new Error('Lockfile root name is stale. Synchronize Linro root metadata without replacing locked dependencies.');
+    if (lock.version !== manifest.version || lock.packages?.['']?.version !== manifest.version)
+      throw new Error(
+        'Lockfile root version is stale. Preserve the lockfile and synchronize its root package metadata before release.',
+      );
+    if (lock.name !== manifest.name || (lock.packages[''].name ?? lock.name) !== manifest.name)
+      throw new Error(
+        'Lockfile root name is stale. Synchronize Linro root metadata without replacing locked dependencies.',
+      );
   }
 
   const output = resolve(outputDir ?? join(source, 'release', `Linro-v${manifest.version}`));
   // Do not stage into source folders, an ancestor, or a symlinked output parent.
-  const checkOutput = path => {
+  const checkOutput = (path) => {
     if (inside(path, source) || (inside(source, path) && !inside(join(source, 'release'), path))) {
-      throw new Error('Output must be outside source folders or under the dedicated release/ directory.');
+      throw new Error(
+        'Output must be outside source folders or under the dedicated release/ directory.',
+      );
     }
   };
   checkOutput(output);
@@ -125,14 +242,21 @@ export async function stageSource({ sourceRoot = ROOT, outputDir } = {}) {
       const target = join(temporary, entry.name);
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, entry.bytes, { mode: entry.mode, flag: 'wx' });
-      if (sha256(await readFile(target)) !== entry.hash) throw new Error(`Staged copy failed checksum verification: ${entry.name}`);
+      if (sha256(await readFile(target)) !== entry.hash)
+        throw new Error(`Staged copy failed checksum verification: ${entry.name}`);
     }
-    const inventory = entries.map(entry => `${entry.hash}  ${posix(entry.name)}\n`).join('');
+    const inventory = entries.map((entry) => `${entry.hash}  ${posix(entry.name)}\n`).join('');
     await writeFile(join(temporary, 'MANIFEST.sha256'), inventory, { flag: 'wx' });
     // Recheck output at commit time; a release path is never intentionally replaced.
-    if (await exists(output)) throw new Error('Output appeared while staging; refusing to overwrite it.');
+    if (await exists(output))
+      throw new Error('Output appeared while staging; refusing to overwrite it.');
     await rename(temporary, output);
-    return { version: manifest.version, path: output, manifestEntries: entries.length, totalFiles: entries.length + 1 };
+    return {
+      version: manifest.version,
+      path: output,
+      manifestEntries: entries.length,
+      totalFiles: entries.length + 1,
+    };
   } catch (error) {
     await rm(temporary, { recursive: true, force: true });
     throw error;
@@ -142,7 +266,8 @@ export async function stageSource({ sourceRoot = ROOT, outputDir } = {}) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const args = process.argv.slice(2);
-    if (args.length && !(args.length === 2 && args[0] === '--out' && args[1])) throw new Error('Usage: node scripts/package-source.mjs [--out OUTPUT_DIRECTORY]');
+    if (args.length && !(args.length === 2 && args[0] === '--out' && args[1]))
+      throw new Error('Usage: node scripts/package-source.mjs [--out OUTPUT_DIRECTORY]');
     const result = await stageSource({ outputDir: args[1] });
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {

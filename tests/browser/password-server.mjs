@@ -1,16 +1,19 @@
 // Test-only Node HTTP bridge to the real compiled Redirect Worker and SQLite.
 // Not workerd, not production HTTPS/Access, and never included in Worker entrypoints.
+// Set LINRO_TEST_PASSWORD to choose a password when exercising this loopback fixture manually.
+import { newTestSecret, testPassword } from '../fixture-credentials.mjs';
 import { createServer } from 'node:http';
+import { listenOnLoopback } from '../loopback-port.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 const root = resolve(process.argv[2] ?? fileURLToPath(new URL('../..', import.meta.url)));
 const { setup, createLink } = await import(pathToFileURL(resolve(root, 'tests/harness.mjs')));
 const { default: worker } = await import(pathToFileURL(resolve(root, '.build/apps/redirect/src/index.js')));
 const { env, domain } = await setup({
-  LINK_PASSWORD_SECRET: 'browser-test-only-pepper-never-deploy-0123456789ABCDE',
+  LINK_PASSWORD_SECRET: newTestSecret(),
   PASSWORD_LIMITER: { limit: async () => ({ success: true }) },
 });
-const link = await createLink(env, domain, { password: 'browser-fixture-password', max_redirects: 2, target_url: 'https://browser-target.example.org/done' });
+const link = await createLink(env, domain, { password: process.env.LINRO_TEST_PASSWORD ?? testPassword, max_redirects: 2, target_url: 'https://browser-target.example.org/done' });
 env.DB.sqlite.prepare('UPDATE domains SET hostname=? WHERE id=?').run('127.0.0.1', domain.id);
 const events = [];
 const count = () => env.DB.sqlite.prepare('SELECT redirect_count FROM links WHERE id=?').get(link.id).redirect_count;
@@ -25,5 +28,5 @@ const server = createServer(async (req, res) => {
     res.writeHead(r.status, Object.fromEntries(r.headers)); res.end(Buffer.from(await r.arrayBuffer()));
   } catch { res.writeHead(500); res.end('Fixture failed'); }
 });
-server.listen(0, '127.0.0.1', () => console.log(JSON.stringify({ port: server.address().port })));
+console.log(JSON.stringify({port:await listenOnLoopback(server)}));
 process.on('SIGTERM', () => server.close(() => { env.DB.close(); process.exit(0); }));

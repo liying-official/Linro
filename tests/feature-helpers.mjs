@@ -1,9 +1,10 @@
+import { newTestSecret, testPassword } from './fixture-credentials.mjs';
 import assert from 'node:assert/strict';
 import { setup, call, createLink, redirect } from './harness.mjs';
 export { call, createLink, redirect };
 // Never a deployment secret. Fixtures are confined to ephemeral test databases.
-export const PASSWORD = 'correct horse fixture password';
-export const PEPPER = 'test-only-pepper-not-for-deployment-0123456789ABCD';
+export const PASSWORD = testPassword;
+export const PEPPER = newTestSecret();
 export class FakeKV {
   values = new Map(); operations = []; failGet = false; failPut = false; failDelete = false;
   async get(key, options) { this.operations.push(['get', key, options]); if (this.failGet) throw new Error('fixture read outage'); return this.values.get(key) ?? null; }

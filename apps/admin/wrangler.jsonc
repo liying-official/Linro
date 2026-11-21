@@ -16,6 +16,9 @@
     }
   ],
   "name": "linro-admin",
+  "compatibility_flags": [
+    "enable_request_signal"
+  ],
   "main": "src/worker/index.ts",
   "assets": {
     "directory": "./dist",
@@ -31,7 +34,7 @@
   ],
   "vars": {
     "SOURCE_URL": "",
-    "BROWSER_TIMEZONE_ENABLED": "true",
+    "BROWSER_TIMEZONE_ENABLED": "false",
     "CLOUDFLARE_DEVICE_TYPE_ENABLED": "false",
     "REDIRECT_CACHE_TTL": "300",
     "QUERY_FORWARD_ALLOWLIST": "[\"utm_source\",\"utm_medium\",\"utm_campaign\",\"utm_term\",\"utm_content\"]",
@@ -42,9 +45,12 @@
     "ACCESS_ISSUER": "https://your-team.cloudflareaccess.com",
     "ACCESS_AUD": "YOUR_ACCESS_APPLICATION_AUD",
     "BOOTSTRAP_OWNER_EMAIL": "owner@example.com",
-    "CLOUDFLARE_ACCOUNT_ID": "11111111111111111111111111111111",
+    "CLOUDFLARE_ACCOUNT_ID": "00000000000000000000000000000000",
     "ANALYTICS_ENABLED": "false",
-    "ANALYTICS_DATASET": "linro_clicks"
+    "ANALYTICS_DATASET": "linro_clicks",
+    "ANALYTICS_ROLLUP_ENABLED": "false",
+    "ANALYTICS_ROLLUP_INTERVAL_MINUTES": "15",
+    "ANALYTICS_ROLLUP_RECHECK_HOURS": "6"
   },
   "ratelimits": [
     {

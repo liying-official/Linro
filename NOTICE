@@ -1,10 +1,8 @@
-Linro v1.0.1 — AGPL-3.0-only
+Linro v1.0.2 — AGPL-3.0-only
 
 Linro is licensed as a whole under the GNU Affero General Public License,
 version 3 only (SPDX-License-Identifier: AGPL-3.0-only), not "or later".
 See LICENSE for the unmodified license text.
-
-No project contributor identities or exclusive ownership claims are invented.
 
 This software is provided WITHOUT ANY WARRANTY. See LICENSE.
 Network deployment: see docs/LICENSING.md for the Corresponding Source offer.

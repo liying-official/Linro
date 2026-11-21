@@ -1,0 +1,2 @@
+# Match .editorconfig and keep byte-verified templates/migrations portable.
+* text=auto eol=lf

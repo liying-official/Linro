@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { VERSION } from '../.build/packages/shared/src/platform.js';
 import { environment, call, admin, redirect } from './harness.mjs';
+import { readWebSource } from './web-source.mjs';
 const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
 test('package, shared constant, both health endpoints, session and system health report one release', async t => {
@@ -23,9 +24,9 @@ test('package, shared constant, both health endpoints, session and system health
 });
 
 test('GUI version labels and JSON export metadata use the shared release constant', () => {
-  const app = readFileSync(new URL('../apps/admin/src/web/App.tsx', import.meta.url), 'utf8');
+  const app = readWebSource();
   assert.match(app, /import \{ VERSION \} from '\.\.\/\.\.\/\.\.\/\.\.\/packages\/shared\/src\/platform';/);
   assert.ok((app.match(/v\{VERSION\}/g) ?? []).length >= 1);
-  assert.match(app, /format: 'linro', version: VERSION/);
-  assert.doesNotMatch(app, /v1\.0\.0(?:-fix)?|version: '1\.0\.0(?:-fix)?'/);
+  assert.match(app, /format: 'linro',\s*version: VERSION/);
+  assert.doesNotMatch(app, /version:\s*'\d+\.\d+\.\d+'/);
 });

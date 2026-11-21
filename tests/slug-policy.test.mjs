@@ -1,8 +1,9 @@
+import { newTestSecret, testPassword } from './fixture-credentials.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { slug } from '../.build/packages/shared/src/validation.js';
 import { setup, call, createLink, visit, redirect } from './harness.mjs';
-import { api as demoAPI, resetDemo, enterDemo } from '../apps/demo/src/store.mjs';
+import { api as demoAPI, resetDemo, enterDemo, demoCode } from '../apps/demo/src/store.mjs';
 
 const allowed = ['Linro', 'linro', 'LINRO', 'admin', 'api', 'assets', 'robots', 'favicon', 'well-known'];
 const reserved = ['health', 'HEALTH', 'cdn-cgi', 'CDN-CGI', '__Linro_unlock', '__linro_browser', '__LINRO_ASSETS', '__Linro_future'];
@@ -39,16 +40,16 @@ test('formerly reserved business slugs can be created, renamed, and resolved wit
 });
 
 test('Linro short links still enforce password protection', async t => {
-  const { env, domain } = await setup({ BROWSER_TIMEZONE_ENABLED: 'false', LINK_PASSWORD_SECRET: 'p'.repeat(43), PASSWORD_LIMITER: { limit: async () => ({success:true}) } });
+  const { env, domain } = await setup({ BROWSER_TIMEZONE_ENABLED: 'false', LINK_PASSWORD_SECRET: newTestSecret(), PASSWORD_LIMITER: { limit: async () => ({success:true}) } });
   t.after(() => env.DB.close());
-  await createLink(env, domain, { slug:'Linro', password:'fixture-password-only', target_url:'https://example.org/protected' });
+  await createLink(env, domain, { slug:'Linro', password:testPassword, target_url:'https://example.org/protected' });
   const response=await visit(env,'/Linro');
   assert.equal(response.status,200); assert.equal(response.headers.get('location'),null);
   assert.match(await response.text(), /__Linro_unlock\/Linro/);
 });
 
 test('demo and real short-link validation agree on allowed and necessary reserved names', async () => {
-  resetDemo(); enterDemo('Linro'); const [domain]=await demoAPI('/domains');
+  resetDemo(); enterDemo(demoCode); const [domain]=await demoAPI('/domains');
   for (const value of allowed) assert.equal((await demoAPI('/links','POST',{domain_id:domain.id,slug:value,target_url:'https://content.example/page'})).slug,value);
   for (const value of reserved) await assert.rejects(demoAPI('/links','POST',{domain_id:domain.id,slug:value,target_url:'https://content.example/page'}),e=>e.code==='invalid_slug');
 });

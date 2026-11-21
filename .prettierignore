@@ -1,0 +1,9 @@
+node_modules/
+**/dist/
+.build/
+.local/
+.wrangler/
+docs/demo/
+release/
+work/
+outputs/

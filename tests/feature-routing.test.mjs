@@ -9,20 +9,27 @@ const geo = [{ kind: 'continent', code: 'AS', target_url: 'https://asia.example.
 test('unbound KV stays D1-only and unlimited ordinary redirects do not write D1', async t => {
   const { env, domain } = await featureFixture(t); await createLink(env, domain); env.DB.queries.length = 0;
   assert.equal((await request(env)).status, 301);
-  assert.equal(env.DB.queries.filter(q => /^SELECT/.test(q)).length, 2);
+  assert.equal(env.DB.queries.filter(q => /^SELECT/.test(q)).length, 1);
   assert.equal(env.DB.queries.filter(q => /UPDATE|INSERT|DELETE/.test(q)).length, 0);
 });
-test('KV miss loads D1 and caches only a route; a subsequent hit is guarded by one compact D1 query', async t => {
-  const { env, domain, kv } = await featureFixture(t, { kv: true }); const link = await createLink(env, domain);
-  kv.values.clear(); kv.operations.length = 0; env.DB.queries.length = 0;
+test('eligible KV miss fills once; a hit retains eligibility and post-KV authorization reads', async t => {
+  const { env, domain } = await featureFixture(t); const link = await createLink(env, domain);
+  const kv = new FakeKV(); env.REDIRECT_CACHE = kv; env.DB.queries.length = 0;
   assert.equal((await request(env)).headers.get('location'), link.target_url);
   assert.deepEqual(kv.operations.map(o => o[0]), ['get', 'put']);
+  assert.equal(env.DB.queries.length, 2);
   const value = kv.values.get(cacheKey(domain.hostname, link.slug)); assert.ok(value);
   for (const key of ['password_hash','password_protected','redirect_count','max_redirects','created_by']) assert.equal(Object.hasOwn(JSON.parse(value).rule, key), false, key);
   kv.operations.length = 0; env.DB.queries.length = 0;
   assert.equal((await request(env)).status, 301);
   assert.deepEqual(kv.operations.map(o => o[0]), ['get']);
-  assert.equal(env.DB.queries.length, 1); assert.match(env.DB.queries[0], /l\.rule_revision/); assert.doesNotMatch(env.DB.queries[0], /SELECT l\.\*/);
+  assert.equal(env.DB.queries.length, 2); assert.match(env.DB.queries[1], /l\.rule_revision/); assert.match(env.DB.queries[1], /target_managed/); assert.doesNotMatch(env.DB.queries[1], /SELECT l\.\*/);
+  kv.operations.length = 0; env.DB.queries.length = 0;
+  assert.equal((await request(env)).headers.get('location'),link.target_url);
+  assert.deepEqual(kv.operations,[]); assert.equal(env.DB.queries.length,1);
+  env.DB.sqlite.prepare('UPDATE links SET max_redirects=1 WHERE id=?').run(link.id);
+  assert.equal((await request(env)).status,301); assert.equal((await request(env)).status,403);
+  assert.deepEqual(kv.operations,[]);
 });
 test('KV keys separate domains and preserve case-sensitive slugs', async t => {
   const { env, domain, kv } = await featureFixture(t, { kv: true });
@@ -45,10 +52,26 @@ test('KV read, write and deletion outages fall back safely without turning commi
   assert.equal((await call(env, '/links/' + link.id + '?version=' + updated.version, 'DELETE')).status, 200);
   await noTarget(await request(env), 404);
 });
-test('slow KV reads are bounded and recover using D1', async t => {
+test('KV reads completing after 200ms can still hit within the 750ms budget', async t => {
+  const { env, domain, kv } = await featureFixture(t, { kv: true }); const link = await createLink(env, domain);
+  const get = kv.get.bind(kv);
+  kv.get = async (...args) => { await new Promise(resolve => setTimeout(resolve, 350)); return get(...args); };
+  kv.operations.length = 0; env.DB.queries.length = 0;
+  const response = await request(env);
+  assert.equal(response.status, 301); assert.equal(response.headers.get('location'), link.target_url);
+  assert.deepEqual(kv.operations.map(o => o[0]), ['get']);
+  assert.equal(env.DB.queries.length, 2);
+  assert.match(env.DB.queries[1], /target_managed/);
+  assert.ok(env.DB.queries.every(q => !/SELECT l\.\*/.test(q)), 'late KV hit must not fall back to a full route read');
+});
+
+test('KV reads exceeding 750ms recover using D1 without attempting a refill', async t => {
   const { env, domain } = await featureFixture(t); await createLink(env, domain);
-  env.REDIRECT_CACHE = { get: () => new Promise(() => {}), put: async () => {}, delete: async () => {} };
-  const start = performance.now(); assert.equal((await request(env)).status, 301); assert.ok(performance.now() - start < 2000);
+  let puts = 0;
+  env.REDIRECT_CACHE = { get: () => new Promise(() => {}), put: async () => { puts++; }, delete: async () => {} };
+  const start = performance.now(); const response = await request(env), elapsed = performance.now() - start;
+  assert.equal(response.status, 301); assert.equal(response.headers.get('location'), 'https://example.org/docs');
+  assert.ok(elapsed >= 700 && elapsed < 2000, `KV timeout took ${elapsed}ms`); assert.equal(puts, 0);
 });
 test('malformed, mismatched, expired and future cache envelopes cannot replace D1', async t => {
   const { env, domain, kv } = await featureFixture(t, { kv: true }); await createLink(env, domain);
@@ -68,6 +91,28 @@ test('old fills after mutations never resurrect stale routes, removed links, or 
   await call(env, '/domains/' + domain.id, 'PATCH', { version: domain.version, enabled: false }); kv.values.set(key, old); await noTarget(await request(env), 404);
   await call(env, '/domains/' + domain.id, 'PATCH', { version: domain.version + 1, enabled: true });
   await call(env, '/links/' + link.id + '?version=' + current.version, 'DELETE'); kv.values.set(key, old); await noTarget(await request(env), 404);
+});
+test('a plausible KV payload with the current ID/revision still cannot change the D1 destination or redirect policy', async t=>{
+  const {env,domain,kv}=await featureFixture(t,{kv:true});
+  const link=await createLink(env,domain), key=cacheKey(domain.hostname,link.slug);
+  const entry=JSON.parse(kv.values.get(key));
+  entry.rule.target_url='https://other.example/private';
+  entry.rule.query_mode='replace'; entry.rule.redirect_code=308;entry.rule.cache_ttl=3600;
+  kv.values.set(key,JSON.stringify(entry));env.DB.queries.length=0;
+  const response=await request(env,'/docs?utm_source=private');
+  assert.equal(response.status,301);assert.equal(response.headers.get('location'),link.target_url);
+  assert.match(response.headers.get('cache-control'),/no-store/);
+});
+test('a missing or inconsistent hostname index still rejects a registered destination', async t=>{
+  const {env,domain}=await featureFixture(t);
+  const link=await createLink(env,domain);
+  env.DB.sqlite.prepare('INSERT INTO domains(id,hostname,created_at,updated_at) VALUES(?,?,0,0)')
+    .run(crypto.randomUUID(),'example.org');
+  env.DB.sqlite.prepare('UPDATE link_destination_hosts SET hostname=? WHERE link_id=?')
+    .run('outdated.example',link.id);
+  await noTarget(await request(env),503);
+  env.DB.sqlite.prepare('DELETE FROM link_destination_hosts WHERE link_id=?').run(link.id);
+  await noTarget(await request(env),503);
 });
 test('new password and quota settings cannot be bypassed by an old unprotected KV entry', async t => {
   const { env, domain, kv } = await featureFixture(t, { kv: true }); const link = await createLink(env, domain);
@@ -94,9 +139,9 @@ test('cache hits reapply current private-target policy, not just cached write-ti
   await createLink(env, domain, { target_url: 'http://10.0.0.8/' }); assert.equal((await request(env)).status, 301);
   env.PRIVATE_TARGET_ALLOWLIST = '[]'; await noTarget(await request(env), 503);
 });
-test('KV is checked before the SQL guard, but no negative cache entries are written', async t => {
+test('missing routes stop at D1 without reading or writing negative KV entries', async t => {
   const { env, kv } = await featureFixture(t, { kv: true }); kv.operations.length = 0;
-  await noTarget(await request(env, '/missing'), 404); assert.deepEqual(kv.operations.map(o => o[0]), ['get']); assert.equal(kv.values.size, 0);
+  await noTarget(await request(env, '/missing'), 404); assert.deepEqual(kv.operations, []); assert.equal(kv.values.size, 0);
 });
 test('API rename/domain move and bulk enable/disable/delete maintain cache keys', async t => {
   const { env, domain, kv } = await featureFixture(t, { kv: true }); const link = await createLink(env, domain);
@@ -108,10 +153,9 @@ test('API rename/domain move and bulk enable/disable/delete maintain cache keys'
     const response = await request(env, '/moved', { host: d2.hostname }); assert.equal(response.status, action === 'enable' ? 301 : 404);
   }
 });
-test('cache payload excludes the password verifier and successful counters even for protected capped links', async t => {
+test('protected capped links never populate KV with any payload', async t => {
   const { env, domain, kv } = await featureFixture(t, { kv: true }); const link = await createLink(env, domain, { password: PASSWORD, max_redirects: 2 });
-  const value = [...kv.values.values()][0]; const stored = row(env, link.id);
-  assert.ok(!value.includes(PASSWORD)); assert.ok(!value.includes(stored.password_hash)); assert.ok(!value.includes('redirect_count')); assert.ok(!value.includes('max_redirects'));
+  assert.ok(row(env, link.id).password_hash); assert.equal(kv.values.size, 0); assert.deepEqual(kv.operations, []);
 });
 
 for (const cached of [false, true]) test(`country > continent > default using only request.cf (${cached ? 'KV' : 'D1'})`, async t => {
@@ -119,7 +163,7 @@ for (const cached of [false, true]) test(`country > continent > default using on
   for (const [cf, expected] of [[{ country:'JP',continent:'AS' },'https://japan.example.org/'],[{ country:'CN',continent:'AS' },'https://asia.example.org/'],[{ country:'US',continent:'NA' },'https://example.org/docs'],[{},'https://example.org/docs'],[{country:'T1'},'https://example.org/docs']]) {
     const res = await request(env, '/docs', { cf }); assert.equal(res.status,301); assert.equal(res.headers.get('location'),expected); assert.match(res.headers.get('cache-control'),/no-store/);
   }
-  assert.equal((await request(env, '/docs?country=JP&continent=AS', { headers: { 'cf-ipcountry':'JP','x-country':'JP','x-forwarded-for':'8.8.8.8' } })).headers.get('location'), 'https://example.org/docs');
+  assert.equal((await request(env, '/docs?country=JP&continent=AS', { headers: { 'cf-ipcountry':'JP','x-country':'JP','x-forwarded-for':'192.0.2.20' } })).headers.get('location'), 'https://example.org/docs');
 });
 test('all seven Cloudflare continent identifiers are selectable and exact country rules override array order', () => {
   for (const continent of CONTINENTS) {
@@ -160,7 +204,7 @@ test('geographic audit details redact target query strings and fragments', async
 });
 
 test('real Context waitUntil contract keeps cache writes off response latency and settles failures without rollback',async t=>{
-  const {env,domain,kv}=await featureFixture(t,{kv:true});await createLink(env,domain);kv.values.clear();
+  const {env,domain}=await featureFixture(t);await createLink(env,domain);const kv=new FakeKV();env.REDIRECT_CACHE=kv;
   let fail;kv.put=()=>new Promise((_,reject)=>{fail=reject;});const tasks=[];
   const res=await request(env,'/docs',{ctx:{waitUntil(task){tasks.push(task);}}});assert.equal(res.status,301);assert.equal(tasks.length,1);assert.equal(typeof fail,'function');
   fail(new Error('fixture late KV outage'));await Promise.all(tasks);assert.equal((await call(env,'/links')).data.total,1);

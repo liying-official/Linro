@@ -29,7 +29,7 @@ function transport({ status = 200, body = ok, error, stalled = false, responseEv
 
 test('deployment probes accept only credential-free HTTPS /health URLs', () => {
   assert.equal(healthURL(url), url);
-  for (const bad of ['http://go.example.com/health', 'https://u:p@go.example.com/health', 'https://go.example.com/docs', url + '?token=secret', url + '#fragment']) assert.throws(() => healthURL(bad));
+  for (const bad of ['http://go.example.com/health', 'https://EXAMPLE_USER:REDACTED@go.example.com/health', 'https://go.example.com/docs', url + '?token=secret', url + '#fragment']) assert.throws(() => healthURL(bad));
 });
 test('probe CLI validates bounds, family, versions, duplicate URLs and unknown arguments', () => {
   const opts = parseOptions(['--url', url, '--url', url, '--expected-version', version, '--family', '6', '--attempts', '3', '--interval-ms', '0', '--timeout-ms', '500']);

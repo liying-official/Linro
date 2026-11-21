@@ -8,7 +8,21 @@ export default defineConfig({
   plugins: [tailwindcss()],
   // This replacement is scoped to the demo build. Production uses its normal
   // client, Workers authentication, CSRF, and authorization without changes.
-  resolve: { alias: [{ find: /^\.\/client$/, replacement: fileURLToPath(new URL('./src/client.ts', import.meta.url)) }] },
-  build: { outDir: '../../docs/demo', emptyOutDir: true, sourcemap: false, target: 'es2022', modulePreload: { polyfill: false } },
+  // Nested admin pages import ../client; they must use the same isolated demo transport.
+  resolve: {
+    alias: [
+      {
+        find: /^(?:\.\/|\.\.\/)client$/,
+        replacement: fileURLToPath(new URL('./src/client.ts', import.meta.url)),
+      },
+    ],
+  },
+  build: {
+    outDir: '../../docs/demo',
+    emptyOutDir: true,
+    sourcemap: false,
+    target: 'es2022',
+    modulePreload: { polyfill: false },
+  },
   esbuild: { jsx: 'transform', jsxFactory: 'React.createElement', jsxFragment: 'React.Fragment' },
 });

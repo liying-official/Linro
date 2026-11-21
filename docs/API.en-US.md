@@ -1,152 +1,167 @@
-# Linro v1.0.1 API Reference
+# Linro v1.0.2 API reference
 
-[简体中文](https://liying-official.github.io/Linro/?lang=zh#api-reference) · [Complete guide](GUIDE.en-US.md) · [Permissions](GUIDE.en-US.md#permissions)
+[简体中文](API.md) · [Setup and usage](GUIDE.en-US.md) · [Security](SECURITY.en-US.md)
 
-This reference retains chapters 09–13 and 16 from the complete guide and covers 25 admin method/path combinations. Deployment and role details in the guide are part of the same version contract.
+An API is the dashboard's set of buttons for programs. A **path** chooses the button, an HTTP **method** chooses read/create/change/delete, and a JSON **body** supplies its fields. This reference describes all **25 admin method/path combinations** in v1.0.2, plus the public visitor flow.
 
-<a id="api-conventions"></a>
+Start with authentication and a read-only `/session` call. Then use the endpoint and field tables for your integration. All example domains, email addresses, UUIDs, and records are fictional. Replace IDs with values returned by your own instance; never use documentation examples as credentials.
 
-## 09 · API Conventions
+<a id="conventions"></a>
 
-<a id="section-9-1"></a>
+## 1. Make a valid admin request
 
-### 9.1 Addressing, Authentication, and Browser Calls
+### 1.1 Base address and authentication
 
-The Admin API base address is `https://admin.example.com/Linro/v1`. Paths in the following endpoint table are relative to that base. Host, case, and path must match exactly; do not add an extra trailing `/`.`GET /Linro/v1` itself is not a resource index. Unknown endpoints or unsupported methods return 404 `api_not_found`.
+The example base address is:
 
-| Request header | Use case |
+```text
+https://admin.example.com/Linro/v1
+```
+
+All admin paths below are relative to that base. Casing matters. `/Linro/v1` itself is not an index, and an extra trailing slash is not automatically normalized. Unknown method/path combinations return 404 `api_not_found`.
+
+Production authentication has two layers:
+
+1. **Cloudflare Access** admits the identity to the admin hostname. The Worker verifies its Access JWT.
+2. **Linro** checks an enabled user and that user's permissions. An automated client supplies a Linro application token as well as Access service credentials.
+
+| Header | When to use it |
 | --- | --- |
-| `Accept: application/json` | Recommended on every admin client request; cannot turn an authentication redirect into successful JSON |
-| `Content-Type: application/json` | Required on admin writes with a JSON body; can also be sent with `charset=utf-8` |
-| `Authorization: Bearer Linro_…` | Automation application token; must be the complete value returned at creation time |
-| `Cf-Access-Jwt-Assertion` | Production Worker requires a valid Access JWT; after normal Access authentication it is supplied by the environment—do not forge it |
-| `CF-Access-Client-Id`, `CF-Access-Client-Secret` | Credentials for an automation identity to pass outer Access; separate from the Linro token |
-| `Origin: https://admin.example.com` | Interactive Access write requests must match exactly; a normal browser sends this itself |
-| `X-Linro-CSRF: 1` | Required for interactive Access write requests; not required for reads |
-| `X-Linro-Dev` | Only for restricted local-development mode; must not be added to production calls |
+| `Accept: application/json` | Recommended for admin requests; an Access login page is still not a successful JSON response |
+| `Content-Type: application/json` | Required when sending an admin JSON body; `charset=utf-8` is accepted |
+| `CF-Access-Client-Id`, `CF-Access-Client-Secret` | A server-side client's Access service credentials |
+| `Authorization: Bearer Linro_…` | The complete Linro token returned when it was created |
+| `Cf-Access-Jwt-Assertion` | Valid JWT supplied after Access authentication; do not invent one |
+| `Origin` | Interactive writes require the exact admin origin; the browser normally supplies it |
+| `X-Linro-CSRF: 1` | Required for interactive Access writes, not reads |
+| `X-Linro-Dev` | Restricted local loopback development only |
 
-Human Access write requests also reject `Sec-Fetch-Site: cross-site`. Application-token and development authentication are not environment-provided cookies and do not use the same CSRF check; however the `/Linro` API entry still rejects an **Origin explicitly supplied and not equal to ADMIN_ORIGIN**including the string `null` and empty values. Server-side token requests may omit Origin; do not fill in an arbitrary third-party website Origin.
+Interactive Access writes also reject `Sec-Fetch-Site: cross-site`. Explicit bearer/local-development credentials use a different CSRF path, but **every admin API request rejects a supplied Origin that differs from `ADMIN_ORIGIN`**, including empty or literal `null` values. A server-side client can omit Origin.
 
-This version does not expose permissive cross-origin CORS, a public OPTIONS preflight protocol, or JSONP. Browser scripts on another site cannot use a bearer token to bypass same-origin restrictions. Production automation should run on a trusted server; even a read-only token should not be embedded in public webpage source.
+The API does not provide permissive cross-origin CORS, a public OPTIONS preflight contract, or JSONP. Keep automation credentials on a trusted server. A malformed Authorization header selects the token branch and fails; it does not fall back to the browser's human login. Interactive-only routes therefore need the ordinary signed-in session without an application token attached.
 
-When a browser sends Authorization, it enters the token branch first; malformed or invalid Authorization does not fall back to the human-cookie login path. Therefore do not attach an application token to interactive user-management examples.
+### 1.2 Responses and errors
 
-<a id="section-9-2"></a>
-
-### 9.2 Success, Errors, and Response Headers
-
-Success defaults to 200; resource creation / successful import uses 201. Admin JSON always uses this envelope:
+A successful response wraps the endpoint result in `data`:
 
 ```json
 {"ok":true,"data":{"deleted":true}}
 ```
 
-Failure example,`request_id` with a different value on each request:
+An error uses this shape:
 
 ```json
 {"ok":false,"error":{"code":"version_conflict","message":"This item changed. Refresh before saving again.","request_id":"example-request-id"}}
 ```
 
-`data` may be an object, array, or endpoint-specific structure; clients must not assume every response contains `items`. Error bodies `message` use English source-code messages; programs should branch on HTTP status and `error.code` . Every response wrapped by the Worker’s security layer includes `X-Request-Id`; include that value when reporting failures, not tokens or passwords.
+Resource creation/import normally returns 201; other successful admin operations return 200. `data` may be an object or an array. Branch on HTTP status and `error.code`, not the English wording of `message`.
 
-The Admin API uses `Cache-Control: no-store`. The security wrapper also sets CSP, nosniff, frame denial, Referrer-Policy, and related headers; HTTPS responses include HSTS. Application rate-limit 429 responses include `Retry-After: 60`. Responses handled earlier by outer Access / the platform may be 302 or HTML and may not contain Linro JSON / request IDs, so inspect status and Content-Type first.
+Admin API responses use `Cache-Control: no-store`. Wrapped responses include `X-Request-Id` and the Worker's security headers; HTTPS responses include HSTS. Application rate limits return 429 with `Retry-After: 60`. Access/platform failures handled before Linro can instead be HTML or redirects with no Linro envelope. Check status and `Content-Type` before parsing JSON.
 
-<a id="section-9-3"></a>
+### 1.3 Bodies, types, and edit versions
 
-### 9.3 Bodies, Pagination, Time, and Concurrency
+Admin JSON bodies are limited to **262,144 actual streamed bytes**. The root must be a valid UTF-8 object, not an array or `null`. Undeclared fields in normal top-level write bodies are rejected. Bulk item objects are not a strict unknown-field boundary; send only their documented fields. Use JSON numbers for numeric fields; `"302"` is different from `302`.
 
-Admin JSON body limit: **262,144 bytes**based on actual streamed bytes rather than trusting a forged Content-Length. The root must be an object, not an array, null, or invalid UTF-8. Fields are validated per endpoint, and normal write objects reject undeclared fields. Bulk requests must stay within item-count / byte limits.
+Business booleans generally accept `true`, `false`, `1`, or `0`; `reset_redirect_count` accepts only a boolean. Most length limits count JavaScript UTF-16 code units. Password and text fields also have separate UTF-8 byte limits.
 
-Numbers should be JSON numbers, not strings. Boolean business fields generally accept `true / false / 1 / 0` but `reset_redirect_count` accepts only booleans. Most string limits use JavaScript string length; password, text, and body fields with explicit UTF-8 byte limits must satisfy both.
+Timestamps such as `created_at`, `updated_at`, `expires_at`, and `revoked_at` use Unix **seconds**. Export `exported_at` is ISO text; archive `date` is a UTC `YYYY-MM-DD` string.
 
-Time fields `created_at`, `updated_at`, `expires_at`, `revoked_at` are Unix **seconds**, not milliseconds; export package `exported_at` uses ISO strings, while archive `date` uses UTC calendar dates.`null` The meaning of
+Think of `version` as the revision number on a shared document. Link/domain/user PATCH requires the current positive integer version; link/domain DELETE uses `?version=…`. A stale revision returns 409. Settings have no version and use last-write-wins. Token revocation has no version. Public visit counters and `rule_revision` are separate from the admin edit version.
 
-depends on the field—for example, never expires, no access limit, or remove password—and must not be interpreted universally as “leave unchanged.” Pagination `page` defaults to 1 and ranges 1–100000;`limit` defaults to 25 and ranges 1–100. Links and audit return `total`; archive has no `total`; domains, users, tokens, and settings return arrays directly and do not use that pagination shape.
+There is no `Idempotency-Key` implementation. A timed-out POST may already have committed. Before retrying a write, query its expected business record and reconcile the outcome.
 
-PATCH for links, domains, and users requires the current `version`; link / domain DELETE uses `?version=…`. Stale versions return 409; deleting a nonexistent resource generally returns 404. Token revocation does not use version; settings updates have no version and last write wins. Public success counters do not equal admin-edit versions;`rule_revision` is a separate invalidation mechanism for visitor protection credentials and routing rules.
+### 1.4 Pagination
 
-There is no Idempotency-Key implementation. A timed-out POST may already have committed; do not blindly retry—query by business slug / ID and verify. Pagination is not a snapshot, and there is no automatic transaction spanning resources across requests.
+`/links`, `/audit`, and `/stats/archive` support two modes:
 
-<a id="section-9-4"></a>
+| Mode | Request | Response fields |
+| --- | --- | --- |
+| Page, the default | `page=1&limit=25` | `items`, `page`, `limit`; exact count depends on endpoint |
+| Cursor | `pagination=cursor&limit=25` | `items`, `limit`, `next_cursor`; send that cursor for the next page |
 
-### 9.4 HEAD and Health Paths
+`page` defaults to 1 and is 1–100000; `limit` defaults to 25 and is 1–100. A supplied cursor is at most 512 code units. Cursor mode must not include `page`; page mode must not include `cursor`. An invalid mode/mix returns `invalid_pagination`, and malformed cursor data returns `invalid_cursor`. Treat returned cursors as opaque strings and keep the same filters while continuing. A null `next_cursor` means no further page was found. Lists are not transaction snapshots.
 
-Admin routes match explicit HTTP methods. Although the outer layer strips HEAD response bodies,**`HEAD /Linro/v1/links` HEAD does not automatically equal GET**and can return 404. Admin’s independent `/health` supports GET / HEAD and requires authentication; Owner-only `/Linro/v1/system/health` is GET and queries D1; public Redirect `/health` is a different shallow-health endpoint. Do not conflate the three.
+For `/links`, `include_total=true|false` controls an exact count in either mode; its default is true for page mode and false for cursor mode. `/audit` includes `total` only in page mode. `/stats/archive` never includes `total`. Domains/users/tokens/settings return arrays without these paging fields.
 
-**Basis:** `apps/admin/src/worker/index.ts`; `auth.ts`; `api.ts`; `packages/shared/src/http.ts`.
+### 1.5 Three different health checks
+
+| Address | Authentication | What it checks |
+| --- | --- | --- |
+| Admin `/health`, GET/HEAD | Required | Admin shallow status/version |
+| Admin `/Linro/v1/system/health`, GET | Owner-level permission | Worker and D1 `SELECT 1`; analytics configuration only |
+| Public Redirect `/health`, GET/HEAD | Public, still rate limited | Redirect shallow status/version, not D1 |
+
+HEAD is not automatically mapped to GET for admin API routes. For example, `HEAD /Linro/v1/links` can return 404 even though GET exists.
 
 <a id="models"></a>
 
-## 10 · Data Models and Field Rules
+## 2. Fields and returned objects
 
-<a id="section-10-1"></a>
+### 2.1 Link write fields
 
-### 10.1 Link Write Fields
+POST `/links` and each entry in POST `/links/import` accept the following **17 fields**. PATCH `/links/{id}` also accepts `version` and `reset_redirect_count`.
 
-POST `/links` and each `links` entry in POST `/links/import` accept the 16 business fields below. PATCH `/links/{id}` also accepts `version` and `reset_redirect_count`; fields other than `version` may be omitted to preserve their current values.
-
-| Field | Type / constraints | Create default and update semantics |
+| Field | Type and limit | Creation / update behavior |
 | --- | --- | --- |
-| `domain_id` | String, max 36 characters; must reference an existing domain ID | Required on create; a disabled domain may be selected but its links will not be publicly available |
-| `slug` | 1–64 ASCII letters, digits,`_`, `-` | When omitted or empty on create, an 8-character code is generated; empty string on update does not re-randomize |
-| `target_url` | Valid HTTP / HTTPS URL, max 4096 characters | Required when creating redirect mode; not used in text mode |
-| `title` | String, max 200 characters | Defaults to empty; omitted PATCH preserves current value |
-| `description` | String, max 2000 characters | Defaults to empty; normal multiline text is allowed |
-| `redirect_code` | Number `301 / 302 / 307 / 308` | Create defaults to selected domain’s default_redirect_code; omitted update preserves current value |
-| `query_mode` | `discard / merge / replace` | Defaults to discard; text mode forces discard |
-| `enabled` | Boolean or numeric 0 / 1 | Defaults to 1; API output is numeric |
-| `expires_at` | Unix-second integer 1–253402300799, or null | Defaults to null; source allows past times, which behave as expired |
-| `cache_ttl` | Integer 0–3600 seconds | Defaults to 0; this is public client caching, not KV TTL |
-| `geo_rules` | Array of 0–32 items; serialized length at most 65536 characters | Defaults to empty array; omitted PATCH preserves; send `[]` to clear |
-| `password` | null or a 12–128 character string, at most 512 UTF-8 bytes | Omitted: no password on create / preserve on update; null: remove; string: set a new password |
-| `max_redirects` | null or integer 1–1000000000 | null means unlimited; changing the limit does not reset redirect_count |
-| `response_mode` | `redirect / text` | Defaults to redirect; switching mode must also satisfy target / text / geo-rule constraints |
-| `text_content` | Nonempty string, max 16,384 characters and 32,768 UTF-8 bytes | Required in text mode; normalized to empty string in redirect mode |
-| `block_vpn` | Boolean or numeric 0 / 1 | Defaults to 0; turning it on for the first time requires a configured browser-check root secret |
+| `domain_id` | String, maximum 36 code units; existing domain ID | Required on create; a disabled domain can hold links, but they will not serve publicly |
+| `slug` | 1–64 ASCII letters, digits, `_`, `-` | Omit or send empty on create for an eight-character random code; an empty PATCH slug is invalid |
+| `target_url` | Absolute HTTP(S), raw and final normalized URL each within 4096 code units | Required for redirect mode; unused in text mode |
+| `title` | String, maximum 200 | Default empty; omitted PATCH preserves it |
+| `description` | String, maximum 2000; ordinary multiline text allowed | Default empty; omitted PATCH preserves it |
+| `redirect_code` | Numeric 301, 302, 307, or 308 | Defaults to the selected domain's default; omission on update preserves it |
+| `query_mode` | `discard`, `merge`, or `replace` | Default discard; text mode forces discard |
+| `enabled` | Boolean or 0/1 | Default 1; read objects use 0/1 |
+| `expires_at` | Unix-second integer 1–253402300799, or null | Default null; null means no expiry, and past times are accepted as expired |
+| `cache_ttl` | Integer 0–3600 seconds | Default 0; private browser caching, not KV TTL |
+| `kv_cache_ttl` | null, 0, or integer 60–86400 seconds | Null inherits global TTL; 0 bypasses KV; omitted PATCH preserves; protected links bypass regardless |
+| `geo_rules` | 0–32 rules, maximum 65536 serialized code units | Default empty; omit to preserve, `[]` to clear |
+| `password` | null or string of 12–128 code units, at most 512 UTF-8 bytes, no control characters, including TAB/CR/LF | Omit for no password on create / preserve on update; string sets it; null removes it |
+| `max_redirects` | null or integer 1–1000000000 | Null is unlimited; changing the limit does not reset the count |
+| `response_mode` | `redirect` or `text` | Default redirect; the other fields must satisfy the selected mode |
+| `text_content` | String, 1–16384 code units and at most 32768 UTF-8 bytes | Required in text mode; normalized to empty in redirect mode |
+| `block_vpn` | Boolean or 0/1 | Default 0; enabling a new policy requires a valid browser-check root secret |
 
-Additional PATCH fields:`version` must be the current positive integer version;`reset_redirect_count` is boolean and resets only when true; omitted / false does not reset. Clients should send only fields they intend to change and must not treat null as a universal “leave unchanged.”
+For PATCH, `version` is required. `reset_redirect_count: true` resets the finite-request counter; omitted/false leaves it unchanged. Do not treat `null` as a general “keep existing value” instruction.
 
-URL validation rejects illegal control characters, backslashes, username / password, non-HTTP(S) schemes, and similar input; it also enforces admin-host / managed-short-host loop checks and private-target policy. An allowed target does not mean “the server fetched and verified this site successfully”: the source does not fetch destination pages or perform DNS resolution to prove a hostname can never resolve privately.
+Only `health`, `cdn-cgi`, and the `__linro_` prefix are reserved as slugs, ignoring case. `Linro`, `admin`, and `api` are valid business slugs on the separate public host. Dotted names such as `robots.txt` fail the normal slug syntax.
 
-Only `health`, `cdn-cgi`, and the `__linro_` prefix are reserved, case-insensitively. `Linro`, `linro`, `admin`, `api`, `assets`, `robots`, and `favicon` are valid business slugs. Business slugs remain case-sensitive and must contain 1–64 ASCII letters, digits, `_`, or `-`; dotted paths such as `.well-known`, `robots.txt`, and `favicon.ico` still fail slug syntax. The `/Linro/v1` API on the separate admin host is unchanged.
+Target validation rejects credentials, whitespace/control characters, backslashes, non-HTTP(S) schemes, forbidden local/private targets, the admin hostname, and registered short-link hosts. It does not fetch the target or resolve DNS. Sensitive authentication/reset/redirect destinations require `query_mode=discard`.
 
-Passwords are not trimmed, so leading / trailing spaces are part of the password. Never put passwords in logs or URL query strings. If the root secret is missing or malformed, creating / resetting a password fails; the system does not fall back to storing plaintext. Text content may contain TAB / CR / LF but rejects other restricted control characters and invalid Unicode round-trips; it is not rendered as HTML.
+Query behavior is exact: discard retains the saved target query; merge adds only allowed visitor keys absent from the target; replace clears the complete saved query and inserts only allowed visitor keys, even if the result is empty. Internal `_Linro_check` and `_Linro_lang` are never forwarded. A combined final URL over 8192 code units is rejected.
 
-<a id="section-10-2"></a>
+Passwords are not trimmed. Text allows TAB/CR/LF but rejects restricted controls and invalid Unicode round-trips. Text mode cannot retain geographic rules and is never interpreted as HTML.
 
-### 10.2 GeoRule
+### 2.2 Geographic rules
 
 ```json
 [
-  {"kind":"country","code":"JP","target_url":"https://www.example.org/ja/"},
-  {"kind":"continent","code":"EU","target_url":"https://www.example.org/eu/"}
+  {"kind":"country","code":"JP","target_url":"https://example.org/ja/"},
+  {"kind":"continent","code":"EU","target_url":"https://example.org/eu/"}
 ]
 ```
 
-Each item only allows `kind`, `code`, `target_url`.`kind` type country or continent; code is two uppercase letters. continent is fixed to `AF / AN / AS / EU / NA / OC / SA`; country validates uppercase form and rejects `XX`but is not a full ISO-country lookup table—do not submit nonexistent country codes. The same `kind:code` cannot repeat. Match priority is country → continent → default target regardless of the order of country / continent entries in the submitted array.
+Each rule allows only `kind`, `code`, and `target_url`. Country codes use two uppercase letters and reject `XX`; this is format validation, not a full country-code lookup. Continent codes are `AF`, `AN`, `AS`, `EU`, `NA`, `OC`, `SA`. Duplicate `kind:code` pairs are rejected. Match order is **country → continent → default target**, regardless of array order. Every target follows the same security rules.
 
-<a id="section-10-3"></a>
+### 2.3 Link read object
 
-### 10.3 PublicLink Read Object
-
-“PublicLink” in the API means a sanitized admin-interface object, not something anonymously readable. It includes the business configuration above but **does not include `password` or `password_hash`**and additionally contains:
+The source calls this `PublicLink`, meaning a sanitized **admin** object, not an anonymous endpoint. It returns the link configuration without `password` or `password_hash`, plus:
 
 | Field | Meaning |
 | --- | --- |
 | `id` | Link UUID |
-| `hostname`, `short_url` | Domain and short-link address; production short_url uses HTTPS |
-| `password_protected` | Boolean indicating whether password protection exists |
-| `created_by` | Creator user UUID; historical records may be null |
+| `hostname`, `short_url` | Public host and short address; production uses HTTPS |
+| `password_protected` | Whether a password verifier exists |
+| `created_by` | User UUID; legacy rows may be null |
 | `created_at`, `updated_at` | Unix seconds |
-| `version` | Optimistic-lock version for admin edits |
-| `rule_revision` | Link rule revision; used for cache / visitor-proof invalidation and not a substitute for PATCH version |
-| `redirect_count` | Controlled count of successful business requests when an access limit exists; not total click analytics |
-| `remaining_redirects` | Null when unlimited; otherwise `max(0, max_redirects - redirect_count)` |
-| `domain_enabled` | Domain status attached by link-list queries; other read responses do not guarantee this field |
+| `version` | Admin edit revision |
+| `rule_revision` | Policy/cache/proof revision; not a substitute for PATCH version |
+| `redirect_count` | Authorized-request count for a link with a finite limit |
+| `remaining_redirects` | Null if unlimited, otherwise `max(0, max_redirects - redirect_count)` |
+| `domain_enabled` | Included by list queries; do not require it in every link response |
 
-`enabled`, `block_vpn` is 0 / 1;`geo_rules` is already parsed as an array rather than the database JSON string. In text mode the API `target_url` is an empty string; the database-internal compatibility `about:blank` is not used for redirects or outbound fetching.
+`enabled` and `block_vpn` are numeric 0/1. `geo_rules` is a parsed array. In text mode, `target_url` is empty; the internal database sentinel `about:blank` is not a redirect target.
 
-The following is an **example structure, not an actual online record**; later documentation consistently uses four sample IDs: domain / link / user / token.
+Example fictional link:
 
 ```json
 {
@@ -155,14 +170,15 @@ The following is an **example structure, not an actual online record**; later do
   "hostname":"go.example.com",
   "slug":"welcome",
   "short_url":"https://go.example.com/welcome",
-  "target_url":"https://www.example.org/start",
-  "title":"Welcome Page",
-  "description":"Deployment acceptance example",
+  "target_url":"https://example.org/start",
+  "title":"Welcome",
+  "description":"A fictional example",
   "redirect_code":302,
   "query_mode":"discard",
   "enabled":1,
   "expires_at":null,
   "cache_ttl":0,
+  "kv_cache_ttl":null,
   "geo_rules":[],
   "password_protected":false,
   "max_redirects":null,
@@ -172,46 +188,75 @@ The following is an **example structure, not an actual online record**; later do
   "text_content":"",
   "block_vpn":0,
   "created_by":"33333333-3333-4333-8333-333333333333",
-  "created_at":1789776000,
-  "updated_at":1789776000,
+  "created_at":1795219200,
+  "updated_at":1795219200,
   "version":1,
   "rule_revision":1
 }
 ```
 
-<a id="section-10-4"></a>
+### 2.4 Other read objects
 
-### 10.4 Domain, User, Token, Setting, and Audit
-
-| Model | API fields and special meaning |
+| Object | Fields / special behavior |
 | --- | --- |
-| Domain | `id, hostname, name, enabled, default_redirect_code, created_at, updated_at, version`; GET list additionally includes `link_count`. hostname cannot be PATCHed after creation |
-| User | `id, email, display_name, role, enabled, created_at, updated_at, version`; does not return `access_sub`; email cannot be PATCHed after creation |
-| Token list item | `id, name, prefix, scopes, expires_at, revoked_at, created_at`; **stores scopes as a database JSON string**, such as `"[\"links:read\"]"`, so JSON.parse is required |
-| Token create result | `id, token, name, scopes, expires_at, shown_once`; here **scopes is an array**and the full token is returned only once |
-| Setting | `key, value, updated_at`; GET returns all settings, including possible archive cursor records; only `site_name` can be changed through PATCH |
-| Audit | `id, user_id, actor_email, action, resource_type, resource_id, details, request_id, created_at`; **details is a JSON string**, not a directly nested object |
-| DailyStat | `link_id, date, clicks, updated_at`, and list responses additionally include `slug, hostname`; clicks is sampled and weighted and may be non-integer |
+| Domain | `id, hostname, name, enabled, default_redirect_code, created_at, updated_at, version`; full list adds `link_count` |
+| User | `id, email, display_name, role, enabled, created_at, updated_at, version`; omits Access subject |
+| Token list item | `id, name, prefix, scopes, expires_at, revoked_at, created_at`; `scopes` is a **JSON string**, requiring parsing |
+| Token creation result | `id, token, name, scopes, expires_at, shown_once`; here `scopes` is an **array** and the full token appears only once |
+| Setting | `key, value, updated_at`; internal archive settings can appear in the list |
+| Audit | `id, user_id, actor_email, action, resource_type, resource_id, details, request_id, created_at`; `details` is a **JSON string** |
+| DailyStat | `link_id, date, clicks, updated_at`; archive list adds `slug, hostname`; sampled weighted `clicks` may be non-integer |
 
-Site name is 1–80 characters and cannot be whitespace-only; domain display name may be empty up to 100 characters; user display name may be empty up to 100; token name is 1–100 and cannot be whitespace-only. User role must be lowercase `viewer / editor / admin / owner`. The source token table has no `last_used_at` field and there is no corresponding update endpoint, so do not infer such a feature from generic wording in historical material.
+Domain/user display names allow empty strings up to 100 code units. Token names require non-whitespace text up to 100; site name up to 80. Roles are lowercase `viewer`, `editor`, `admin`, `owner`. Token list items have no `last_used_at` field.
 
-Audit records creation, edit, delete, enable/disable, import, token revocation, and related actions. Sensitive URL query / fragment parts are redacted, text records only length, and password fields record only whether protection exists. Reading audit logs cannot recover passwords or full bodies and must not be treated as a complete platform access log.
+Audit URL query/fragment values are redacted; text is represented by length and passwords by protection state. An audit record is not a complete platform access log and cannot reconstruct a password or text body.
 
-**Basis:** `packages/shared/src/platform.ts`; `http.ts`; `validation.ts`; `geo.ts`; `text-response.ts`; `apps/admin/src/worker/data.ts`; `api.ts`; the four D1 migrations.
+<a id="admin-endpoints"></a>
 
-<a id="api-reference"></a>
+## 3. Admin endpoints
 
-## 11 · Complete Admin API Reference
+All results below describe the inner `data`, without repeating `{ "ok": true, "data": ... }`. Replace `{id}` with the resource UUID and omit braces.
 
-This chapter lists, directly from source, **25 “method + path” combinations**. Every response uses the Chapter 09 JSON envelope; the following `data` structures omit that outer wrapper for brevity.`L` means PublicLink,`D` means Domain,`U` means User.`{id}` must be replaced with a real UUID and must not include braces.
+### Endpoint map
 
-<a id="section-11-1"></a>
+| Method and path | Required scope | Interactive only? |
+| --- | --- | --- |
+| `GET /session` | Any authenticated session | No |
+| `GET /summary` | `links:read` | No |
+| `GET /links` | `links:read` | No |
+| `POST /links` | `links:write` | No |
+| `GET /links/{id}` | `links:read` | No |
+| `PATCH /links/{id}` | `links:write` and ownership rule | No |
+| `DELETE /links/{id}` | `links:delete` and ownership rule | No |
+| `POST /links/import` | `links:write` | No |
+| `POST /links/bulk` | `links:write` or `links:delete`, by action | No |
+| `GET /domains` | `domains:read` | No |
+| `POST /domains` | `domains:write` | Scope is not token-grantable |
+| `PATCH /domains/{id}` | `domains:write` | Scope is not token-grantable |
+| `DELETE /domains/{id}` | `domains:write` | Scope is not token-grantable |
+| `GET /stats` | `analytics:read` | No |
+| `GET /stats/archive` | `analytics:read` | No |
+| `GET /users` | `users:write` | Yes |
+| `POST /users` | `users:write` | Yes |
+| `PATCH /users/{id}` | `users:write` | Yes |
+| `GET /tokens` | Current user's own tokens | Yes |
+| `POST /tokens` | Current user's grantable scopes | Yes |
+| `DELETE /tokens/{id}` | Current user's own token | Yes |
+| `GET /audit` | `audit:read` | Scope is not token-grantable |
+| `GET /settings` | `settings:write` | Yes |
+| `PATCH /settings` | `settings:write` | Yes |
+| `GET /system/health` | `settings:write` | Scope is not token-grantable |
 
-### 11.1 GET /session — Current Session
+Interactive Admin/Owner sessions may write all links; Editors and **every application token** may write only links whose `created_by` matches their user. Reads remain workspace-wide. Full role rules are in the [guide](GUIDE.en-US.md#permissions).
 
-**Permission:** Any authenticated session, including an application token; no additional scope. No parameters.
+### 3.1 GET /session
 
-**200 data:**  `user: U`, `scopes: string[]`, `source_url: string`, `auth_kind: access|token|local`, `site_name: string`, `analytics_configured: boolean`, `link_write_scope: owned|workspace`, `version: "1.0.1"`and also:
+No parameters. Returns the current session, including:
+
+- `user` as the User object, `scopes` as an array, and `auth_kind` as `access`, `token`, or `local`.
+- `version: "1.0.2"`, `site_name`, `source_url`, and `analytics_configured`.
+- `link_write_scope: "owned" | "workspace"`.
+- `features` and `security`, illustrated below.
 
 ```json
 {
@@ -220,6 +265,7 @@ This chapter lists, directly from source, **25 “method + path” combinations*
     "browser_checks_configured":true,
     "redirect_cache":false,
     "cache_consistency":"d1-guarded",
+    "redirect_cache_default_ttl":300,
     "passwords_configured":true,
     "text_responses":true,
     "device_header_enabled":false
@@ -231,194 +277,193 @@ This chapter lists, directly from source, **25 “method + path” combinations*
 }
 ```
 
-This is a field-structure example; switches depend on actual configuration. The session does not expose the private-target allowlist, Access credentials, root secrets, or token plaintext. site_name supplies the displayed workspace name.
+These values are illustrative. The collection flag reports the configured global/Analytics switches on Admin; the public flow additionally requires the Redirect writer. Configured secret flags validate local secret format, not equality between Workers. No root secret, Access credential, private-target allowlist, or token plaintext is included.
 
-<a id="section-11-2"></a>
+### 3.2 GET /summary
 
-### 11.2 GET /summary — Overview Counts
+Requires `links:read`. No parameters. Example:
 
-**Permission:** `links:read`. No parameters.
-
-**Example 200 data:** `{"links":6,"active":5,"expired":1,"domains":2}`. Reads the entire shared workspace. active simultaneously requires the link and domain to be enabled, not expired, and not exhausted; expired is counted independently by expiration time and is not guaranteed to be mutually exclusive with disabled or other statuses.
-
-<a id="section-11-3"></a>
-
-### 11.3 GET /links — List Links
-
-**Permission:** `links:read`.
-
-| Query parameter | Rule |
-| --- | --- |
-| `page`, `limit` | Standard pagination, default 1 / 25, limit max 100 |
-| `q` | Optional, max 120 characters; matches slug, title, target_url, but not text_content / description |
-| `domain_id` | Optional domain ID filter |
-| `status` | `all / active / disabled / expired / exhausted`; omitted means no filtering |
-
-**200 data:**  `{"items":[L],"total":6,"page":1,"limit":25}`, ordered by created_at descending, then id descending. Filtering by a nonexistent domain_id generally returns an empty list rather than an automatic resource 404. Errors: 400 `search_too_long / invalid_status / invalid_field`; insufficient permission 403.
-
-```http
-GET /Linro/v1/links?status=active&limit=25&page=1&q=welcome
+```json
+{"links":6,"active":5,"expired":1,"domains":2}
 ```
 
-<a id="section-11-4"></a>
+Counts cover the shared workspace. Active requires enabled link/domain, unexpired time, and unexhausted quota. Expired is counted independently and may overlap other inactive states.
 
-### 11.4 POST /links — Create Link
+### 3.3 GET /links
 
-**Permission:** `links:write`. Body uses the Chapter 10 Link write fields.
+Requires `links:read`. Supports the paging rules above and:
+
+| Parameter | Rule |
+| --- | --- |
+| `q` | Substring search of slug/title/target; escaped SQL LIKE pattern including its two `%` delimiters must fit **50 UTF-8 bytes** |
+| `domain_id` | Optional exact domain ID filter; an unknown ID normally yields an empty list |
+| `status` | `all`, `active`, `disabled`, `expired`, or `exhausted` |
+| `view` | `full` by default, or `picker` |
+| `include_total` | Exact string `true` or `false`; defaults by paging mode |
+
+Full items are Link read objects. Picker items contain only `id`, `hostname`, `slug`, reducing data and work for selection controls. Ordering is descending `created_at`, then descending `id`.
+
+Page-mode example shape:
+
+```json
+{"items":[],"total":0,"page":1,"limit":25}
+```
+
+Cursor-mode example shape without a count:
+
+```json
+{"items":[],"limit":25,"next_cursor":null}
+```
+
+Use `pagination=cursor&limit=25&view=picker` for a lightweight first selection page. Pass `cursor` on the next call. Invalid search/filter/view/paging returns 400 with a corresponding code.
+
+### 3.4 POST /links
+
+Requires `links:write`. Uses the link write fields:
 
 ```json
 {
   "domain_id":"11111111-1111-4111-8111-111111111111",
   "slug":"welcome",
-  "target_url":"https://www.example.org/start",
-  "title":"Welcome Page",
+  "target_url":"https://example.org/start",
+  "title":"Welcome",
   "redirect_code":302,
   "query_mode":"discard",
   "cache_ttl":0,
+  "kv_cache_ttl":null,
   "block_vpn":false
 }
 ```
 
-**201 data:**  Full L. created_by is set automatically to the current user; if slug is omitted, random-code uniqueness conflicts are retried up to 5 times. An explicit slug conflict returns 409 `conflict` and the server does not silently substitute another code. Invalid parameters return 400; selected domain missing returns 400 `domain_not_found`; protection root secret not configured returns 503. Business write and success audit are committed in the same D1 batch; KV update is not an authorization condition for write success.
+Returns **201** and the new Link read object. The server sets ownership to the authenticated user. A generated slug retries uniqueness conflicts up to five times; an explicitly conflicting slug returns 409 `conflict` without silently changing it. A missing domain returns 400 `domain_not_found`; missing protection prerequisites can return 503.
 
-<a id="section-11-5"></a>
+The business write and success audit commit together in D1. KV update success is not an authorization requirement for the write.
 
-### 11.5 GET /links/{id} — Read One Link
+### 3.5 GET /links/{id}
 
-**Permission:** `links:read`. No body;**200 data:**  L. Missing resource returns 404 `not_found`. Every authorized admin reader can see this object regardless of created_by; the password verifier is not returned.
+Requires `links:read`. Returns one Link read object or 404 `not_found`. Any workspace reader can read it regardless of creator, without receiving its password verifier.
 
-<a id="section-11-6"></a>
+### 3.6 PATCH /links/{id}
 
-### 11.6 PATCH /links/{id} — Update Link
-
-**Permission:** `links:write`, and must also satisfy link-ownership rules. Body requires version; other fields are partial updates.
+Requires `links:write` and the ownership rule. Send the current `version` and only intended changes:
 
 ```json
-{"version":1,"target_url":"https://www.example.org/new","title":"Updated Entry","cache_ttl":0}
+{"version":1,"title":"Updated welcome page","target_url":"https://example.org/new"}
 ```
 
-Example count reset:`{"version":2,"reset_redirect_count":true}` Example password removal:`{"version":3,"password":null}` The versions above are illustrative only. For each operation, read the current value first; this is not a fixed sequential script.
+To remove a password, send `password: null`; to reset the finite count, send `reset_redirect_count: true`, each with the actual current version. Returns the updated Link object. Missing resource is 404, stale revision is 409 `version_conflict`, and forbidden ownership is 403 `link_owner_required`.
 
-**200 data:** Updated L. Missing resources return 404; stale versions return 409 version_conflict; ownership violations return 403 link_owner_required; invalid fields return 400. A domain or slug change commits to D1 before best-effort invalidation of the old KV route. This is not an atomic D1/KV transaction; stale KV hits still require the latest D1 authorization. Cached or in-flight responses cannot be recalled instantly.
+Changing domain/slug commits D1 before best-effort old-route KV invalidation. It is not a distributed D1/KV transaction. Fresh D1 guards still apply to stale snapshots, and already-issued browser responses cannot be recalled.
 
-<a id="section-11-7"></a>
+### 3.7 DELETE /links/{id}
 
-### 11.7 DELETE /links/{id} — Delete Link
-
-**Permission:** `links:delete` + ownership constraint. Required query `version`; no JSON body.
+Requires `links:delete`, ownership, and query `version`. No JSON body.
 
 ```http
 DELETE /Linro/v1/links/22222222-2222-4222-8222-222222222222?version=1
 ```
 
-**200 data:**  `{"deleted":true}`. Missing resource 404, version conflict 409, cross-owner write 403. D1 daily_stats cascades with the link foreign key; historical AE events already written are not deleted by this route, so deleting a link does not mean every historical record in all storage disappears immediately.
+Returns `{"deleted":true}`. Missing/stale/ownership failures use 404/409/403. Associated D1 daily archive rows cascade with the link; historical Analytics Engine events are not deleted by this route.
 
-<a id="section-11-8"></a>
+### 3.8 POST /links/import
 
-### 11.8 POST /links/import — Atomic Small-Batch Import
-
-**Permission:** `links:write`. Top-level body only allows `links`with 1–10 items; each uses create fields and does not accept read-only fields from export objects.
+Requires `links:write`. The only top-level field is `links`, containing **1–10** create-field objects:
 
 ```json
 {
   "links":[
-    {"domain_id":"11111111-1111-4111-8111-111111111111","slug":"intro","target_url":"https://www.example.org/intro","redirect_code":302},
+    {"domain_id":"11111111-1111-4111-8111-111111111111","slug":"intro","target_url":"https://example.org/intro","redirect_code":302},
     {"domain_id":"11111111-1111-4111-8111-111111111111","slug":"notice","response_mode":"text","text_content":"Maintenance completed.","geo_rules":[]}
   ]
 }
 ```
 
-**201 data:**  `{"imported":2,"ids":["22222222-2222-4222-8222-222222222222","55555555-5555-4555-8555-555555555555"]}`. All items are normalized first, then the current batch is committed transactionally; any validation or uniqueness conflict prevents partial import within that request. Errors: 400 `invalid_import` / field error, 409 conflict, 413 oversized. This route is not a CSV-upload endpoint and does not accept multipart or an outer JSON `domains/settings`.
+Returns **201** with `{"imported":2,"ids":["…","…"]}`. The current request is atomic: validation/uniqueness failure prevents partial import within that request. Separate requests are separate commits. This is not a CSV or multipart upload route and does not restore exported read-only fields, users, counters, or settings.
 
-<a id="section-11-9"></a>
+The GUI handles larger files and protection markers before using this endpoint. A custom importer must not silently discard an exported `password_protected` marker and create an unprotected record.
 
-### 11.9 POST /links/bulk — Partial-Success Bulk Enable / Disable / Delete
+### 3.9 POST /links/bulk
 
-**Permission:** When action is enable / disable, `links:write`; when delete, `links:delete`. Ownership is checked per item. Top level allows only action and items; items is 1–10 objects containing id and version, with duplicate IDs forbidden.
+Action `enable` or `disable` requires `links:write`; `delete` requires `links:delete`. Each item also checks ownership. Only `action` and `items` are allowed. Items contain `id` and current `version`, with 1–10 entries and no duplicate ID.
 
 ```json
 {"action":"disable","items":[{"id":"22222222-2222-4222-8222-222222222222","version":1}]}
 ```
 
-**Example 200 data:** `{"results":[{"id":"22222222-2222-4222-8222-222222222222","ok":false,"conflict":true}]}`. Successful item: `ok:true`; cross-owner failure includes `forbidden:true`; missing or changed-version items generally include `conflict:true`. HTTP 200 means the bulk request itself completed normally, not that every item succeeded. Invalid action, empty arrays, duplicate IDs, etc. return 400 before execution; per-item success does not share one rollback transaction.
+Returns 200 with `results`. Each result has its ID and `ok`; failures can include `forbidden:true` or `conflict:true`. HTTP 200 means the request was processed, not that every item succeeded. Items do not share one all-or-nothing transaction. Invalid action/shape/duplicates fail before execution.
 
-<a id="section-11-10"></a>
+### 3.10 GET /domains
 
-### 11.10 GET /domains — Domain List
+Requires `domains:read`. No pagination. Default `view=full` returns all Domain objects, including disabled ones, with `link_count`, ordered by hostname. `view=directory` returns only `id`, `hostname`, `enabled`, `default_redirect_code` and avoids per-domain link counts. Other views return 400 `invalid_view`.
 
-**Permission:** `domains:read`. No pagination / body;**200 data:**  `D[]`, sorted by hostname, each with `link_count`. Disabled domains are included. There is no separate `GET /domains/{id}`endpoint; find one by listing.
+There is no `GET /domains/{id}` route; select from the list.
 
-<a id="section-11-11"></a>
+### 3.11 POST /domains
 
-### 11.11 POST /domains — Create Domain Record
-
-**Permission:** `domains:write`, and only interactive Admin / Owner currently satisfy that role set.
+Requires `domains:write`, available to interactive Admin/Owner roles rather than token scopes.
 
 ```json
-{"hostname":"go.example.com","name":"Official Short Link","enabled":true,"default_redirect_code":302}
+{"hostname":"go.example.com","name":"Public links","enabled":true,"default_redirect_code":302}
 ```
 
-Only hostname, name, enabled, default_redirect_code are allowed. hostname is required and hostname-validated; name defaults empty, enabled defaults 1, redirect code defaults 301.**201 data:**  D, not guaranteed to include link_count.
+Only those four fields are accepted. Hostname is required, limited to 253 code units, converted to lowercase, and must be a valid ASCII/punycode DNS hostname without scheme/port/path/trailing dot; normal production creation rejects IPv4 literals. `name` defaults empty, `enabled` to 1, and default redirect code to **301**.
 
-Duplicate domain returns 409 `conflict`; admin host returns 400 `admin_hostname`; if existing link default / geo targets already point to the hostname being added, returns 409 `hostname_is_destination`so targets can be migrated first and managed-short-link loops are avoided. Success creates only the D1 record; it does not create Cloudflare resources.
+Returns **201** with the Domain object. Duplicate hostname is 409 `conflict`; admin hostname is 400 `admin_hostname`. A hostname already used by a saved default/geographic destination returns 409 `hostname_is_destination`; migrate those targets first. This creates only a D1 record, not DNS or a Cloudflare Custom Domain.
 
-<a id="section-11-12"></a>
+### 3.12 PATCH /domains/{id}
 
-### 11.12 PATCH /domains/{id} — Update Domain Record
-
-**Permission:** `domains:write`. Only version, name, enabled, default_redirect_code are allowed.
+Requires `domains:write`. Accepts `version`, `name`, `enabled`, and `default_redirect_code`:
 
 ```json
-{"version":1,"name":"Public Entry","enabled":true,"default_redirect_code":302}
+{"version":1,"name":"Public entry","enabled":true,"default_redirect_code":302}
 ```
 
-**200 data:**  Updated D. hostname is immutable; providing it returns 400 `unknown_field`. Missing 404, version conflict 409. Disabling a domain affects every link under it; changing default redirect code does not rewrite existing links.
+Returns the updated Domain. Hostname is immutable; supplying it is an unknown-field error. Disabling the domain stops public serving for all its links. Changing its default code affects future link creation, not existing link codes. Missing/stale responses are 404/409.
 
-<a id="section-11-13"></a>
+### 3.13 DELETE /domains/{id}
 
-### 11.13 DELETE /domains/{id} — Delete Domain Record
+Requires `domains:write` and query `version`; no body. Returns `{"deleted":true}`. A domain with links returns 409 `in_use`; move/delete those links first. This does not detach Cloudflare routing or DNS.
 
-**Permission:** `domains:write`. Required query `version`; **200 data:**  `{"deleted":true}`. If links still reference the domain, returns 409 `in_use`instead of cascading deletion. Explicitly move / delete links first. This operation does not detach the platform Custom Domain / DNS.
+### 3.14 GET /stats
 
-<a id="section-11-14"></a>
+Requires `analytics:read`.
 
-### 11.14 GET /stats — Analytics Engine Live Query
-
-**Permission:** `analytics:read`.
-
-| Query parameter | Rule |
+| Parameter | Rule |
 | --- | --- |
-| `days` | Default 7, integer 1–90; queries the most recent corresponding number of days, output represented in UTC |
-| `link_id` | One lowercase canonical UUID; optional |
-| `link_ids` | Comma-separated 1–50 lowercase canonical UUIDs; mutually exclusive with link_id |
+| `days` | Integer 1–90, default 7; current rolling window grouped in UTC |
+| `view` | `full` by default, or `dashboard`; one value only |
+| `link_id` | One lowercase canonical UUID |
+| `link_ids` | Comma-separated 1–50 lowercase canonical UUIDs |
 
-Repeated link_id or link_ids parameters and mixing both forms are rejected; selection values cannot be empty or end with a comma. The server uses the first days value rather than rejecting duplicates; clients should still send days only once. The 50-item limit is checked before deduplication, then duplicates are removed. Omitting both ID selectors means the entire workspace. If any explicitly selected link does not exist, returns 404 `stats_link_not_found`; it does not silently broaden to all links, even when analytics is not configured, because selection scope is validated first.
+Use either selector or neither, never both. Repeated selectors, empty values, trailing commas, malformed IDs, and more than 50 supplied items are rejected. Deduplication happens after the 50-item check. No selector means the whole workspace. An explicitly selected missing link returns 404 `stats_link_not_found` **before** configuration/cache checks; it never silently broadens the query. Send `days` once; the source uses the first value rather than rejecting duplicates.
 
-When not configured: **200 data**:
+If disabled/incomplete, the response is 200 with:
 
 ```json
 {"available":false,"reason":"Analytics Engine is disabled or the Analytics Read secret is not configured.","sampled":true,"link_ids":null}
 ```
 
-When fully configured and query succeeds, data contains:
+A successful dashboard view contains `available:true`, `sampled:true`, `timezone:"UTC"`, `days`, `link_ids`, `clicks`, and `timeline`. It uses one provider query. Full view additionally contains:
 
-| Field | Structure / explanation |
+| Field | Shape / meaning |
 | --- | --- |
-| `available, sampled, timezone, days, link_ids` | true, true, UTC, window days, null or actual selected array |
-| `clicks` | Sampled weighted total of successful business GETs; not UV |
-| `timeline` | `[{date, clicks}]`, by date; dates with no events are not guaranteed to be zero-filled |
-| `top` | `[{link_id, hostname, slug, clicks}]`, up to 50 entries |
-| `countries` | `[{country, clicks}]`, up to 20 entries |
-| `referrers` | `[{referrer, clicks}]`, up to 20 entries, referrer-host dimension only |
-| `timezones` | `[{timezone, clicks}]`, browser-reported timezone; missing becomes none |
-| `ip_timezones` | `[{timezone, clicks}]`, Cloudflare IP-geolocation timezone |
-| `devices` | `[{device, clicks}]`, device is mobile / pc / none |
-| `suspected_vpn_visits`, `suspected_vpn_successes` | Estimated suspected events and successful visits among them |
-| `blocked_vpn_visits`, `unknown_timezone_blocks` | Estimated VPN-policy rejections and unknown-timezone rejections |
-| `unknown_timezone_successes`, `tor_visits` | Estimated unknown-timezone successes and Tor-related events |
+| `timeline` | `[{date, clicks}]`; missing dates need not be zero-filled |
+| `top` | Up to 50 `{link_id, hostname, slug, clicks}` rows |
+| `countries` | Up to 20 `{country, clicks}` rows |
+| `referrers` | Up to 20 `{referrer, clicks}` rows; hostnames only |
+| `timezones` | `{timezone, clicks}` rows for browser-reported zones; missing is `none` |
+| `ip_timezones` | `{timezone, clicks}` rows for Cloudflare IP geolocation |
+| `devices` | `{device, clicks}` rows with `mobile`, `pc`, or `none` |
+| `suspected_vpn_visits` | Estimated suspected terminal events |
+| `suspected_vpn_successes` | Estimated successful visits among suspected events |
+| `blocked_vpn_visits` | Estimated suspected-policy denials |
+| `unknown_timezone_blocks` | Estimated missing/invalid-timezone denials |
+| `unverifiable_blocks` | Estimated unverifiable ASN/timezone/latency denials, including unknown-timezone blocks |
+| `unknown_timezone_successes` | Estimated successful events with unknown timezone |
+| `tor_visits` | Estimated events carrying the platform Tor signal |
 | `vpn_scope` | `terminal_successes_and_policy_denials_not_unique_users` |
 | `success_scope` | `authorized_get_redirect_or_text` |
-| `dimension_sources` | See source fields below; this does not mean browser-reported data is trustworthy |
+| `dimension_sources` | Describes the fields below |
 
 ```json
 {
@@ -433,241 +478,199 @@ When fully configured and query succeeds, data contains:
 }
 ```
 
-Upstream non-success HTTP status, missing valid data array, or invalid count mapping returns 502 `analytics_query_failed`; network / timeout / JSON-decode exceptions can become generic 500. Do not label every failure “not configured.” The eight queries are not automatically retried.
+`clicks` counts sampled weighted successful business GETs, not unique people. Final redirects and final text count; HEAD and intermediate pages do not. Browser-reported timezone remains untrusted even when included in statistics.
 
-<a id="section-11-15"></a>
+Full view runs eight queries in pairs, at most two at once, under one ten-second deadline. Completed results are cached for 15 seconds within an instance, capped at 16 selections; every caller still passes authentication and selected-ID checks. Provider HTTP/JSON/count failure returns 502 `analytics_query_failed`; deadline returns 504 `analytics_timeout`; caller cancellation can produce 408 `request_aborted` and stop later queries.
 
-### 11.15 GET /stats/archive — D1 Daily Archive
+### 3.15 GET /stats/archive
 
-**Permission:** `analytics:read`. Supports page, limit, and the same link_id / link_ids selectors as /stats;**does not implement days date filtering**.
+Requires `analytics:read`. Supports page/cursor pagination and the same ID selection rules as `/stats`. It has **no `days` date filter** and no total count.
 
-**200 data:**  `{"items":[DailyStat],"sampled":true,"page":1,"limit":25,"link_ids":null,"dimension_detail_available":false}`. No total; ordered by date descending, then link_id. Contains only daily counts already written into D1 and whose links still exist. It contains no country, device, timezone, or VPN historical dimensions and is not an automatic transparent fallback for /stats. Existing archive remains readable after AE is disabled.
-
-<a id="section-11-16"></a>
-
-### 11.16 GET /users — User List
-
-**Permission:** `users:write` + interactive session, meaning Owner. No pagination;**200 data:**  `U[]`, ordered by created_at. There is no GET /users/{id}. Application tokens cannot call it even if owned by an Owner.
-
-<a id="section-11-17"></a>
-
-### 11.17 POST /users — Create User
-
-**Permission:** Owner interactive session.
+Page-mode example:
 
 ```json
-{"email":"editor@example.com","display_name":"Content Editor","role":"editor"}
+{"items":[],"sampled":true,"page":1,"limit":25,"link_ids":null,"dimension_detail_available":false}
 ```
 
-Only email is required; display_name defaults empty, role defaults viewer, and new users default enabled. enabled, access_sub, version, and id cannot be supplied.**201 data:**  U. Duplicate email 409; invalid role 400 `invalid_role`. This action does not send email and does not create an Access policy; the member must still satisfy outer authentication conditions.
+Cursor mode replaces `page` with `next_cursor`. Rows are ordered by descending `date`, then ascending `link_id`. Items are DailyStat objects for links that still exist. The archive contains D1 daily totals already written by rollup, not live country/device/timezone/VPN dimensions. It remains readable after Analytics is disabled and is not an automatic fallback for `/stats`.
 
-<a id="section-11-18"></a>
+### 3.16 GET /users
 
-### 11.18 PATCH /users/{id} — Modify / Disable User
+Requires `users:write` and an interactive session: effectively Owner. Returns User objects ordered by `created_at`, with no pagination and no Access subject. There is no single-user GET route. Owner-owned application tokens cannot call it.
 
-**Permission:** Owner interactive session. Only version, display_name, role, enabled are allowed.
+### 3.17 POST /users
+
+Requires interactive Owner.
+
+```json
+{"email":"editor@example.com","display_name":"Example editor","role":"editor"}
+```
+
+Accepts only `email`, `display_name`, `role`. Email is required, trimmed/lowercased, and limited to 254 code units. Name defaults empty, role defaults viewer, and the user starts enabled. `id`, `enabled`, `version`, and Access subject cannot be supplied.
+
+Returns **201** with User. Duplicate email is 409 `conflict`; unsupported role is 400 `invalid_role`. It does not send an invitation or create an Access policy. The user must also pass Access.
+
+### 3.18 PATCH /users/{id}
+
+Requires interactive Owner. Accepts current `version`, `display_name`, `role`, `enabled`:
 
 ```json
 {"version":1,"role":"viewer","enabled":false}
 ```
 
-**200 data:** Updated U. email and access_sub cannot be changed. Disabling or demoting the final enabled Owner returns 409 last_owner; a stale version returns 409 version_conflict; a missing user returns 404. There is no DELETE user route. Disabling a user blocks subsequent authentication by that user and their tokens without deleting their public links.
+Returns updated User. Email and Access subject are immutable through this API. Removing/demoting the final enabled Owner returns 409 `last_owner`; stale revision is 409, missing user 404. There is no DELETE route. Disabling a user blocks their later login and token use without deleting their public links.
 
-<a id="section-11-19"></a>
+### 3.19 GET /tokens
 
-### 11.19 GET /tokens — List Your Tokens
+Any interactive user may list their own tokens. No pagination; includes revoked records, ordered by descending creation time. Fields are the Token list item model above. The `prefix` is display-only; `scopes` is a JSON string. No full token, token hash, other-user identity, or last-used time is returned.
 
-**Permission:** Any interactive session, self only; no extra scope required. No pagination.**200 data:**  Array of Token list items ordered by created_at descending, including revoked records.
+### 3.20 POST /tokens
 
-```json
-[{
-  "id":"44444444-4444-4444-8444-444444444444",
-  "name":"Read-only Inspection",
-  "prefix":"Linro_ABCDEF",
-  "scopes":"[\"links:read\",\"domains:read\"]",
-  "expires_at":1792368000,
-  "revoked_at":null,
-  "created_at":1789776000
-}]
-```
-
-prefix is display-only and cannot be used as the full token. Here scopes is a JSON string; token_hash, full token, other user IDs, and last-used time are not returned.
-
-<a id="section-11-20"></a>
-
-### 11.20 POST /tokens — Create Your Application Token
-
-**Permission:** Interactive session; scopes must be among the five non-admin scopes the current role is allowed to grant.
+Any interactive user may create a token with scopes their current role can grant:
 
 ```json
-{"name":"Read-only Inspection","scopes":["links:read","domains:read"],"expires_at":1792368000}
+{"name":"Example read client","scopes":["links:read","domains:read"],"expires_at":1795824000}
 ```
 
-The example expires_at is illustrative; real calls should dynamically use `Math.floor(Date.now()/1000) + 30*86400` or another valid future time, at least 60 seconds and at most 365 days from creation; out-of-range values return 400 invalid_field. Original scopes array length 1–5; invalid / over-privileged scopes return 403 `invalid_scopes`; valid duplicates are deduplicated. name cannot be blank; creation is rejected with 409 when 50 or more non-revoked records already exist `token_limit`.
+The timestamp is a fictional structural example. Compute a future time for a real call, such as `Math.floor(Date.now()/1000) + 7*86400`. Allowed expiry is at least 60 seconds and at most 365 days ahead.
 
-**201 data:**  `id, token, name, scopes: string[], expires_at, shown_once: true`. Save the full token securely immediately and never write it into a URL, public page, or log. A later GET list cannot recover it; revoke and create a new token if lost.
+Only `name`, `scopes`, `expires_at` are allowed. Supply 1–5 scopes from `links:read`, `links:write`, `links:delete`, `domains:read`, `analytics:read`, limited by the user's role. Valid duplicates are removed; invalid/over-privileged scopes return 403 `invalid_scopes`. Fifty non-revoked records, including expired ones, cause 409 `token_limit`; revoke unused records first.
 
-<a id="section-11-21"></a>
+Returns **201** with `id`, full `token`, `name`, `scopes` array, `expires_at`, `shown_once:true`. Save the token immediately in private secret storage. It cannot be recovered from a later list; if lost, revoke and recreate it.
 
-### 11.21 DELETE /tokens/{id} — Revoke Your Token
+### 3.21 DELETE /tokens/{id}
 
-**Permission:** Interactive session, and the token must belong to the current user. No version and no body.**200 data:**  `{"revoked":true}`. Already revoked / missing / another user’s token all return 404 `not_found`; this is not an idempotent design that returns 200 on unlimited repeated revocation. A token cannot call this endpoint to revoke itself.
+Interactive user, own token only. No body/version. Returns `{"revoked":true}`. Already-revoked, missing, or someone else's tokens all return 404 `not_found`; repeated revocation is not an always-200 operation. A token cannot call this route to revoke itself.
 
-<a id="section-11-22"></a>
+### 3.22 GET /audit
 
-### 11.22 GET /audit — Audit Log
+Requires `audit:read`, available to interactive Admin/Owner roles rather than token scopes. Page mode returns `items`, exact `total`, `page`, `limit`. Cursor mode returns `items`, `limit`, `next_cursor` without a count query. Order is descending `created_at`, then descending `id`.
 
-**Permission:** `audit:read`, meaning interactive Admin / Owner. Supports page and limit; no server-side user_id, action, or date filters.
+No server-side user/action/date filters are implemented. Parse each item's `details` JSON string if needed; sensitive fields have already been reduced/redacted.
 
-**200 data:**  `{"items":[Audit],"total":100,"page":1,"limit":25}`, ordered by created_at descending and id descending. details is a JSON string and must be explicitly parsed; logged details are already redacted and cannot recover passwords, secret URL parameters, or plain-text bodies.
+### 3.23 GET /settings
 
-<a id="section-11-23"></a>
+Requires `settings:write` and interactive Owner. Returns all Setting objects sorted by key, including possible `analytics_rollup_…` internal records. Do not send the list back as a write body.
 
-### 11.23 GET /settings — All Settings
+### 3.24 PATCH /settings
 
-**Permission:** `settings:write` + interactive session, meaning Owner. No pagination;**200 data:**  Setting array sorted by key. It may include `analytics_rollup_…` internal records; do not blindly PATCH back the entire GET result.
-
-<a id="section-11-24"></a>
-
-### 11.24 PATCH /settings — Change Site Name
-
-**Permission:** Owner interactive session. Accepts only `site_name`:
+Requires interactive Owner. The only accepted field is:
 
 ```json
-{"site_name":"Linro team links"}
+{"site_name":"Example team links"}
 ```
 
-**200 data:**  `{"site_name":"Linro team links"}`. Length 1–80 and not whitespace-only; no version, so concurrent update is last-write-wins. This endpoint cannot change Access, KV, analytics_enabled, timezone switches, root secrets, or Cloudflare resources.
+Returns the saved `site_name`. It must be non-whitespace text of 1–80 code units. There is no version; the last write wins. This route cannot change Access, bindings, feature switches, secrets, or Cloudflare resources.
 
-<a id="section-11-25"></a>
+### 3.25 GET /system/health
 
-### 11.25 GET /system/health — Worker and D1 Health
-
-**Permission:** `settings:write`, effectively available to Owner. No parameters. Runs D1 `SELECT 1` then returns:
+Requires `settings:write`, effectively Owner. It runs D1 `SELECT 1`, then returns:
 
 ```json
-{"worker":"ok","database":"ok","analytics":"configured_not_probed","version":"1.0.1"}
+{"worker":"ok","database":"ok","analytics":"configured_not_probed","version":"1.0.2"}
 ```
 
-When analytics is not configured, analytics is `disabled_or_incomplete`.**configured_not_probed means configuration exists; it does not prove an AE SQL query succeeded.** D1 exceptions do not return the success object above; unmapped exceptions become 500 `internal_error`. This endpoint is not a public probe.
+When analytics is incomplete/off, that field is `disabled_or_incomplete`. `configured_not_probed` does not prove an Analytics SQL query succeeded. A D1 error does not return this success object; unmapped errors become 500 `internal_error`.
 
-**Basis:** This chapter maps directly to `apps/admin/src/worker/api.ts`; field conversion is in `data.ts`; ownership / scopes in `auth.ts`; analytics structures in `analytics.ts`. Do not assume unlisted PUT, user deletion, single-domain read, token refresh, manual archive, ownership transfer, or API bulk-export features exist.
+There are no unlisted PUT, user-delete, token-refresh, manual-rollup, ownership-transfer, single-domain GET, or bulk-export API routes in this release.
 
-<a id="public-api"></a>
+<a id="public-protocol"></a>
 
-## 12 · Public Redirect, Password, and Browser-Check Protocol
+## 4. Public visitor requests
 
-<a id="section-12-1"></a>
+These paths use the **Redirect Worker's public hostname**, without `/Linro/v1`. An application token is not a password-unlock credential.
 
-### 12.1 Route Overview
+### 4.1 Route table
 
-The following paths live on the **Redirect Worker’s short-link domains**without `/Linro/v1`. They are not backend admin APIs and do not use application tokens as short-link unlock credentials.
-
-| Method | Path | Normal result and purpose |
+| Method | Path | Result |
 | --- | --- | --- |
-| GET / HEAD | `/` | 200 plain-text brand message; does not list links or automatically redirect to admin |
-| GET / HEAD | `/health` | 200 raw JSON `{"status":"ok","version":"1.0.1"}`; does not query D1 |
-| GET / HEAD | `/robots.txt` | 200 text `User-agent: *`, `Disallow: /`; not access control |
-| GET / HEAD | `/__Linro_assets/password.css` | Password / check-page styles, no-store |
-| GET / HEAD | `/__Linro_assets/browser.js` | Browser-check script, no-store |
-| GET / HEAD | `/{slug}` | Returns page, redirect, text, or rejection depending on protection flow |
-| POST | `/__Linro_unlock/{slug}` | Same-origin password form; success 303 back to same short code |
-| POST | `/__Linro_browser/{slug}` | Same-origin browser-check form; success 200 JSON or 303 back to same short code |
+| GET/HEAD | `/` | Plain-text brand response, no link directory |
+| GET/HEAD | `/health` | Raw JSON `{"status":"ok","version":"1.0.2"}`, no D1 probe |
+| GET/HEAD | `/robots.txt` | `User-agent: *` / `Disallow: /`; crawler advice, not authorization |
+| GET/HEAD | `/__Linro_assets/{fingerprinted-file}` | Current fingerprinted password CSS/JS and browser JS; immutable one-year caching |
+| GET/HEAD | `/__Linro_assets/password.css`, `/__Linro_assets/password.js`, `/__Linro_assets/browser.js` | Current legacy asset content with `no-store` |
+| GET/HEAD | `/{slug}` | Redirect, text, protection page, or denial according to current rules |
+| POST | `/__Linro_unlock/{slug}` | Password verification |
+| POST | `/__Linro_browser/{slug}` | Browser verification |
+| POST | `/__Linro_rtt` | One authenticated encrypted latency receipt for a VPN challenge |
 
-Using other methods on internal POST paths returns 405 `Allow: POST` and is handled uniformly before checking whether the short code exists, so database state is not leaked. Other paths do not support POST / PUT / DELETE and return 405 `Allow: GET, HEAD`. Path case matters; old-brand internal paths are not retained as aliases.
+Internal POST routes reject other methods with 405 and `Allow: POST` before checking link existence. Normal public routes reject unsupported methods with `Allow: GET, HEAD`. The public rate limiter runs before health, assets, and business lookup; missing production binding/limiter failure can return 503.
 
-Public REDIRECT_LIMITER runs before health, assets, and business lookup. Missing production rate-limit binding or limiter execution failure can return 503. Therefore public health 200 proves only shallow handling and version for that side; it does not prove the domain is registered in D1, the target works, AE queries work, or the password flow works.
+### 4.2 Final responses and finite counts
 
-<a id="section-12-2"></a>
+A valid redirect returns its 301/302/307/308 and `Location`. A valid text link returns 200 `text/plain; charset=utf-8`, with no destination Location. Missing/disabled link or domain returns 404; expired uses configured 404/410; exhausted quota returns 403 without revealing the target.
 
-### 12.2 Normal Links and HEAD
+The Worker checks current link/domain state, protection prerequisites, and remaining quota. For `block_vpn`, Tor/ASN policy precedes the password/browser flow. Final destination/rule validation and finite-quota authorization happen before serving the business response.
 
-A valid redirect link finally returns configured 301 / 302 / 307 / 308 with Location; a valid text link finally returns 200 `text/plain; charset=utf-8` with no target Location. Missing, disabled link, or disabled domain returns 404; expiration follows `EXPIRED_LINK_STATUS` and returns 404 or 410; exhausted access limit returns 403 with no target.
+An authorized **HEAD consumes one finite slot just like GET**, but has no body and records no successful-click event. A HEAD of a password page does not unlock or consume quota. A VPN-protected HEAD without proof returns 403; collection-only HEAD can skip JavaScript.
 
-Protection order summary: method check → outer Worker limiter → latest link / domain read → enablement / expiry / data validity → exhaustion / Tor precheck → password → browser check → final target and rule revalidation → atomic quota consumption → final business response and optional success analytics. Validation failure never falls back through cache to an unprotected redirect.
+Ordinary redirects can use `cache_ttl` for private client caching. Password, geographic, finite-limit, and browser flows use `no-store`; text always uses `no-store`. Do not override these with an outer Cache Everything rule. Already-issued cached redirects cannot be recalled.
 
-**HEAD is not a side-effect-free quota probe.** If it satisfies all protection and reaches the final redirect / text response, both HEAD and GET consume one slot for a limited link. HEAD does not write success-click analytics and the outer layer strips its body. A password-page HEAD neither unlocks nor consumes quota. On a block_vpn link, HEAD without valid proof returns 403; when only global collection is enabled and per-link block_vpn is off, HEAD can skip timezone collection.
+### 4.3 Password POST
 
-Public success responses disable CDN caching by default. Only ordinary redirects with no password, no geo routing, no access limit, and no browser flow may allow private client caching according to link.cache_ttl. Protected redirects are no-store; text is always no-store. Do not add outer “Cache Everything” rules that override these responses.
+A GET without a valid password cookie receives a 200 password page when other policies permit. The form sends exactly one `password` to the same-origin unlock path using `application/x-www-form-urlencoded`, with a maximum body of 8192 bytes.
 
-<a id="section-12-3"></a>
+If `Sec-Fetch-Site` is supplied it must be `same-origin`. An explicit real Origin must match the full public origin. Missing Origin or literal `null` is accepted only with explicit `Sec-Fetch-Site: same-origin`. Contradictory foreign Origin is always rejected. These headers are browser-origin protection, not authentication of arbitrary HTTP clients; the password and current rules still apply.
 
-### 12.3 Password Form Protocol
+Wrong password returns 401. Success sets a 900-second production `__Host-Linro_unlock_*` cookie with Secure, HttpOnly, Path=/, SameSite=Lax, bound to host/link/rule revision. The built-in script requests JSON, receives 200, and starts a fresh same-origin GET. A regular form gets 303 to that same short code. The password body is never forwarded to the destination.
 
-The first GET of a password-protected link returns a 200 HTML password page with no target Location. The form action is same-origin `/__Linro_unlock/{slug}`; POST body Content-Type must be `application/x-www-form-urlencoded`with exactly one password field and a streamed body at most 8192 bytes. Do not send JSON and do not place the password in query parameters or logs.
+The POST itself consumes no link quota and records no successful click. A link without a password rejects unlock POST with 405. Protected-rule/password changes invalidate cookies issued under the old revision.
 
-Origin validation requires proof of same-origin. If Sec-Fetch-Site exists it must be same-origin; an explicit Origin must match the full origin. Missing Origin or literal null is accepted only when Sec-Fetch-Site explicitly proves same-origin. An explicit different origin is rejected even if it also claims same-origin. Normal browser forms provide the expected metadata; a third-party cross-site page cannot use this to obtain an unlock.
+### 4.4 Browser POST and latency probe
 
-Wrong password returns a 401 HTML password page and no target; success returns 303 to the original short code and query parameters and sets `__Host-Linro_unlock_*` Cookie. Lifetime is 900 seconds and it is bound to link, host, and rule version; in production it is Secure, HttpOnly, Path=/, SameSite=Lax. The intermediate 303 consumes no quota and records no success click; the next GET rechecks all conditions. Even when the link itself uses 307 / 308, the password POST body is never forwarded to the target.
+A GET may show the browser page when effective global collection is active or the link has `block_vpn`. Effective global collection needs both switches and the Redirect Analytics writer. A valid root secret is needed to issue/verify challenges.
 
-Calling password-unlock POST for a link without password does not perform generic login and returns 405. Rule edits, password reset, or password removal can invalidate old cookies; new-protocol cookie names differ from the old release.
+The same-origin form sends `challenge` and `timezone` once each to `/__Linro_browser/{slug}`. For `block_vpn`, it also sends `latency`, a JSON string with numeric `elapsed` milliseconds and the Worker's authenticated encrypted `receipt` from one same-origin `/__Linro_rtt` probe. Form size is at most 4096 bytes, challenge 2200 code units, and timezone 64.
 
-<a id="section-12-4"></a>
+The RTT endpoint itself takes `application/x-www-form-urlencoded` with exactly one `challenge`, applies the same-origin check, and accepts at most 4096 body bytes. Success returns the authenticated encrypted receipt as text, not JSON. Its receipt is bound to the challenge.
 
-### 12.4 Browser-Check Protocol
+Browser timezone comes from `Intl.DateTimeFormat().resolvedOptions().timeZone`; IP timezone comes from platform metadata. It is an untrusted client signal, not VPN or identity attestation. With VPN blocking, only Radar `ACCESS_ISP` classification proceeds; a browser/edge RTT difference above 50 ms, unknown timezones, or unverifiable data denies access. A pre-challenge denial sends no probe.
 
-When global `BROWSER_TIMEZONE_ENABLED=true` or per-link `block_vpn=1` is enabled, GET may first return a browser-check page. The page collects browser `Intl` timezone string while IP timezone comes from Cloudflare request.cf; this is a weak signal used for policy, not authoritative VPN identification or device authentication.
+The `Accept` header changes only the **success representation**, not the form body or authorization:
 
-The browser submits the challenge and timezone from the page by same-origin POST to `/__Linro_browser/{slug}`. Exactly two form fields are allowed: `challenge` and `timezone`, one each; body type remains `application/x-www-form-urlencoded`with maximum 4096 bytes; challenge must be nonempty and ≤2200 characters; timezone ≤64 characters and may be empty, in which case it is treated as unknown.
-
-The request’s **Accept header only selects the success representation; it does not change body format or authentication**:
-
-| Accept | Success representation |
+| Accept | Success |
 | --- | --- |
-| Explicitly accepts `application/json` with valid q > 0 | 200, `{"ok":true,"data":{"next":"/welcome?_Linro_check=1"}}`; no Location |
-| Does not explicitly accept JSON, uses wildcard, or JSON q=0 | 303 with Location pointing to the same-origin next path |
+| Explicit `application/json` with valid `q > 0` | 200 JSON such as `{"ok":true,"data":{"next":"/welcome?_Linro_check=1"}}`, no Location |
+| Wildcard, absent, or JSON `q=0` | 303 to the same-origin resume path |
 
-Both successful forms set a short-lived `__Host-Linro_browser_*` Cookie, no-store, `Vary: Accept`and neither consumes quota nor records a success click. next contains only the same-origin short code and cleaned query;**the POST never returns the final target URL**. Built-in JS continues with normal page navigation to avoid CSP `form-action 'self'` issues in a later cross-site form-redirect chain. Legacy form 303 remains, but browsers with JavaScript disabled are not guaranteed to complete every cross-site follow-up behavior.
+Both forms set the short-lived proof cookie, `no-store`, and `Vary: Accept`; neither consumes quota or records a successful click. The POST never returns the final destination. Built-in JavaScript uses a fresh ordinary navigation so CSP `form-action 'self'` does not turn the eventual cross-site redirect into a blocked form chain. No-JavaScript completion is not guaranteed.
 
-Challenge lifetime is 120 seconds; issuing proof does not extend the original challenge window. Proof is bound to link rules, host, query, and visitor network context. The resumed GET must have exactly one `_Linro_check=1` marker and a valid cookie. Marker-only, cookie-only, blocked cookie, expired challenge, or a link change during the flow cannot skip checking. The final response clears the proof cookie, but the source has no server-side single-consumption table, so it must not be described as an absolutely non-replayable one-time credential.
+Challenge/proof lasts at most the original 120-second window and is bound to host, link/revision, query, and network context, including ASN for VPN policy. Resumption requires exactly one `_Linro_check=1` plus valid proof. Marker-only or cookie-only requests cannot skip the flow. The final response clears the proof cookie, but there is no server-side single-use consumption table: do not promise absolute replay prevention within a still-valid context.
 
-When block_vpn is enabled, Tor / timezone mismatch or unknown is rejected. When it is not enabled, global collection mainly records data and may allow unknown. Rejection is 403 with no target and no success cookie. Manually altering the form timezone must not be treated as reliable proof that “no VPN is being used”; the limitations of this feature should remain explicit in user-facing communication.
+Chinese/English switching preserves the password field or current check state. A blocked normal browser navigation receives a bilingual 403 result page; protocol clients may receive plain text. Read status and Content-Type rather than assuming all public errors are JSON.
 
-<a id="section-12-5"></a>
+### 4.5 Public status codes
 
-### 12.5 Query Parameters and Public Errors
-
-`_Linro_check` is an internal resume marker,`_Linro_lang` is used for internal language selection and must not be forwarded as an ordinary marketing parameter. Final target query parameters are determined by query_mode and the deployment allowlist; see Configuration. An oversized request URI or final combined URL may return 414.
-
-Public responses may be HTML, plain text, or JSON;**they do not all use the Admin API envelope**. Direct rejections are usually plain text; password errors are HTML; form-parse and similar HttpError paths can return standard JSON error; unhandled public exceptions become 503 plain text with Retry-After. Probes should inspect status and Content-Type first.
-
-| Status | Typical public case |
+| Status | Common meaning |
 | --- | --- |
-| 200 | Root / health / assets; password or browser-check page; final text; browser POST JSON success |
-| 301 / 302 / 307 / 308 | Final redirect; does not mean the target site subsequently succeeds |
-| 303 | Unlock / browser-check same-origin intermediate resume, not a final click |
-| 400 / 415 | Form / format / HTTPS problem; origin-validation failures may also return 403 |
-| 401 | Wrong-password page |
-| 403 | Quota exhausted, invalid source, browser-policy rejection / insufficient proof |
-| 404 / 410 | Missing, disabled, or expired |
-| 405 | Wrong method or internal POST used on an inapplicable link |
-| 414 | URI / combined target too long |
-| 429 | Rate limited; Retry-After is typically 60 seconds |
-| 503 | D1 / root secret / limiter binding / rule-data failure, or rules changed before final validation |
-| 508 | Direct redirect loop detected at final validation |
-
-**Basis:** `apps/redirect/src/index.ts`; `public-pages.ts`; `browser-page.ts`; `unlock-origin.ts`; `packages/shared/src/browser-check.ts`; `link-password.ts`.
+| 200 | Shallow health/assets/root, protection page, final text, or intermediate JSON success |
+| 301/302/307/308 | Final redirect; does not establish that the target later succeeds |
+| 303 | Same-origin resume after verification, not a final click |
+| 400/415 | Invalid form/format/HTTPS requirement |
+| 401 | Wrong password |
+| 403 | Origin/policy/proof/quota denial |
+| 404/410 | Missing, disabled, or expired |
+| 405 | Unsupported method or inapplicable internal operation |
+| 414 | Request or combined destination URL too long |
+| 429 | Rate limited; inspect `Retry-After` |
+| 503 | Database, secret, limiter, rule-data, or final-state failure |
+| 508 | Direct redirect loop found at final validation |
 
 <a id="examples"></a>
 
-## 13 · Ready-to-Adapt Call Examples
+## 5. Small client examples
 
-<a id="section-13-1"></a>
+### 5.1 Bash: read your session
 
-### 13.1 Bash: Read Session and Create Link
-
-The following environment variables belong to the **calling client**, not deployment.json. Set the admin origin, Access service credentials, and Linro token in a private terminal / CI secret first. Never commit credentials. Token needs links:read and domains:read; the create example additionally needs links:write. Outer Access must already allow the service identity.
+Use a private terminal or CI secret store to supply `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`, and `LINRO_API_TOKEN`. Set your own origin. This example makes one read-only call and contains no usable credentials:
 
 ```bash
 export LINRO_ADMIN_ORIGIN='https://admin.example.com'
-# Inject the following three values through your secret-management tool; this example contains no real credentials:
-# CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET, LINRO_API_TOKEN
-: "${CF_ACCESS_CLIENT_ID:?Set Access Client ID}"
-: "${CF_ACCESS_CLIENT_SECRET:?Set Access Client Secret}"
-: "${LINRO_API_TOKEN:?Set Linro application token}"
+: "${CF_ACCESS_CLIENT_ID:?Set the Access client ID privately}"
+: "${CF_ACCESS_CLIENT_SECRET:?Set the Access client secret privately}"
+: "${LINRO_API_TOKEN:?Set the full Linro token privately}"
 
 curl --silent --show-error --fail-with-body --max-time 20 \
-  --dump-header session-headers.txt \
   -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
   -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
   -H "Authorization: Bearer $LINRO_API_TOKEN" \
@@ -675,260 +678,173 @@ curl --silent --show-error --fail-with-body --max-time 20 \
   "$LINRO_ADMIN_ORIGIN/Linro/v1/session"
 ```
 
-Do not add `-L` to automatically follow authenticated requests to unknown redirect hosts. curl `--fail-with-body` mainly treats HTTP 4xx / 5xx as failure; an Access 302 may still exit 0, so inspect response headers and JSON structure.`session-headers.txt` contains session-related response metadata; store it as a private diagnostic file.
+Do not add redirect-following `-L` to authenticated calls. `--fail-with-body` catches 4xx/5xx but an Access 302 can still exit successfully; inspect the HTTP result and verify a JSON `ok:true` response. Session output contains user metadata, so keep terminal transcripts private.
 
-```bash
-# First obtain the actual domain ID, not the DNS hostname.
-curl --silent --show-error --fail-with-body --max-time 20 \
-  -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
-  -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
-  -H "Authorization: Bearer $LINRO_API_TOKEN" \
-  -H 'Accept: application/json' \
-  "$LINRO_ADMIN_ORIGIN/Linro/v1/domains"
+For creation, first GET `/domains` and choose the real domain ID. Save only the intended create fields from section 3.4 to a private `create-link.json`, then use the same headers with `-X POST`, `Content-Type: application/json`, and `--data-binary @create-link.json` at `/links`. This writes a real record. Do not retry a timeout blindly.
 
-# Edit domain_id and ensure the slug is unused; this command creates a real business record.
-cat > create-link.json <<'JSON'
-{
-  "domain_id":"11111111-1111-4111-8111-111111111111",
-  "slug":"docs-example",
-  "target_url":"https://www.example.org/docs",
-  "redirect_code":302,
-  "cache_ttl":0,
-  "block_vpn":false
-}
-JSON
+### 5.2 PowerShell: update one link with its current version
 
-curl --silent --show-error --fail-with-body --max-time 20 \
-  -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
-  -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
-  -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
-  -H "Authorization: Bearer $LINRO_API_TOKEN" \
-  --data-binary @create-link.json \
-  "$LINRO_ADMIN_ORIGIN/Linro/v1/links"
-```
-
-Updates use `-X PATCH` and JSON containing version; delete uses `-X DELETE` and a version query. Do not send the entire L object from POST back as PATCH body. If create times out, query by slug before retrying; do not resend blindly.
-
-<a id="section-13-2"></a>
-
-### 13.2 PowerShell: Read and Update with Optimistic Locking
-
-Credentials are read from the current environment; the PowerShell example uses Invoke-RestMethod, limits redirect following, and lets errors fail. The example changes the specified link title, so replace the id and verify it is within your writable ownership scope first.
+This example changes a title. Replace the hostname and link ID with a dedicated test record you may edit. Credentials remain in the private process environment.
 
 ```powershell
 $ErrorActionPreference = 'Stop'
 $Origin = 'https://admin.example.com'
-$Required = 'CF_ACCESS_CLIENT_ID', 'CF_ACCESS_CLIENT_SECRET', 'LINRO_API_TOKEN'
-foreach ($Name in $Required) {
-    if (-not [Environment]::GetEnvironmentVariable($Name)) {
-        throw "Missing environment variable: $Name"
-    }
+foreach ($Name in 'CF_ACCESS_CLIENT_ID','CF_ACCESS_CLIENT_SECRET','LINRO_API_TOKEN') {
+  if (-not [Environment]::GetEnvironmentVariable($Name)) { throw "Missing $Name" }
 }
 $Headers = @{
-    'CF-Access-Client-Id' = $env:CF_ACCESS_CLIENT_ID
-    'CF-Access-Client-Secret' = $env:CF_ACCESS_CLIENT_SECRET
-    'Authorization' = "Bearer $($env:LINRO_API_TOKEN)"
-    'Accept' = 'application/json'
+  'CF-Access-Client-Id' = $env:CF_ACCESS_CLIENT_ID
+  'CF-Access-Client-Secret' = $env:CF_ACCESS_CLIENT_SECRET
+  'Authorization' = "Bearer $($env:LINRO_API_TOKEN)"
+  'Accept' = 'application/json'
 }
 $Id = '22222222-2222-4222-8222-222222222222'
 $Uri = "$Origin/Linro/v1/links/$Id"
 $Current = Invoke-RestMethod -Uri $Uri -Headers $Headers -Method Get `
-    -MaximumRedirection 0 -TimeoutSec 20
-if ($Current.ok -ne $true -or -not $Current.data.version) {
-    throw 'Did not receive a valid Linro link object.'
-}
-$Body = @{ version = $Current.data.version; title = 'Updated title' } |
-    ConvertTo-Json -Compress
+  -MaximumRedirection 0 -TimeoutSec 20
+if ($Current.ok -ne $true -or -not $Current.data.version) { throw 'No valid link received.' }
+$Body = @{ version = $Current.data.version; title = 'Updated example title' } | ConvertTo-Json -Compress
 $Updated = Invoke-RestMethod -Uri $Uri -Headers $Headers -Method Patch `
-    -ContentType 'application/json; charset=utf-8' `
-    -Body ([Text.Encoding]::UTF8.GetBytes($Body)) `
-    -MaximumRedirection 0 -TimeoutSec 20
-$Updated.data | Select-Object id, slug, title, version
+  -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($Body)) `
+  -MaximumRedirection 0 -TimeoutSec 20
+$Updated.data | Select-Object id,slug,title,version
 ```
 
-Another user may update between read and write and cause 409; that is expected protection and should not be auto-ignored. Client / shell version differences are outside the project code; the example does not claim to have been executed on the user’s machine.
+A concurrent edit can still produce 409 between the GET and PATCH. Reload and compare; do not automatically overwrite it.
 
-<a id="section-13-3"></a>
+### 5.3 Browser: call the API from your signed-in admin page
 
-### 13.3 Browser: Create Interactive-Only Resources
-
-Run this in the developer console of an already signed-in **admin-domain page**. It uses the current same-origin Access cookie and no application token. The example really creates a 7-day, read-only token for the current user. View the output only in a private environment and save it immediately in a secret-management tool.
+This small read-only example uses the current same-origin human session:
 
 ```javascript
-(async () => {
-  const response = await fetch('/Linro/v1/tokens', {
-    method: 'POST',
-    credentials: 'same-origin',
-    redirect: 'manual',
-    headers: {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-      'X-Linro-CSRF': '1'
-    },
-    body: JSON.stringify({
-      name: 'docs-readonly',
-      scopes: ['links:read', 'domains:read'],
-      expires_at: Math.floor(Date.now() / 1000) + 7 * 86400
-    }),
-    signal: AbortSignal.timeout(20000)
-  });
-  if (!(response.headers.get('content-type') || '').includes('application/json')) {
-    throw new Error('No JSON received: check Access login status and same-origin page.');
-  }
-  const result = await response.json();
-  if (!response.ok || result.ok !== true) {
-    throw new Error(result.error?.code || `HTTP ${response.status}`);
-  }
-  window.prompt('The full token is shown only once; save it securely, then close this dialog.', result.data.token);
-})().catch(error => console.error(error.message));
+const response = await fetch('/Linro/v1/session', {
+  credentials: 'same-origin',
+  redirect: 'manual',
+  headers: { Accept: 'application/json' },
+  signal: AbortSignal.timeout(20000)
+});
+if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
+  throw new Error('Check your Access login and admin origin.');
+}
+const result = await response.json();
+if (result.ok !== true) throw new Error(result.error?.code || 'Request failed');
+console.log({ version: result.data.version, writeScope: result.data.link_write_scope });
 ```
 
-User management can use the same fetch structure to call `/users` but requires Owner; replace with `{"email":"editor@example.com","role":"editor"}`. Do not run it in an arbitrary third-party site console and do not copy scripts you do not understand or print full authentication cookies.
+For a deliberate interactive write, use its POST/PATCH/DELETE method, JSON body when required, and `X-Linro-CSRF: 1`; keep it on the admin origin. Do not attach a Linro bearer token to interactive-only user/token/settings calls. Prefer the dashboard for creating tokens so the one-time value can be saved directly and privately.
 
-<a id="section-13-4"></a>
+### 5.4 Node.js: bounded read-only client
 
-### 13.4 Node.js: Bounded Read-Only Client
-
-Save as `linro-read.mjs` and run using the project’s required Node 22 environment. It is read-only, does not automatically retry writes, does not follow redirects, and does not print secrets or raw error bodies to logs.
+Save this as `linro-read.mjs` outside the public release if it will hold private operational changes. With the same private environment variables and Node.js 22.16.0 or newer:
 
 ```javascript
-const required = name => {
+function required(name) {
   const value = process.env[name];
   if (!value) throw new Error(`Missing environment variable: ${name}`);
   return value;
-};
-
+}
 async function main() {
   const origin = new URL(required('LINRO_ADMIN_ORIGIN'));
   if (origin.protocol !== 'https:' || origin.username || origin.password ||
       origin.pathname !== '/' || origin.search || origin.hash) {
-    throw new Error('LINRO_ADMIN_ORIGIN must be an HTTPS origin only.');
+    throw new Error('Use an HTTPS admin origin, without a path or credentials.');
   }
   const token = required('LINRO_API_TOKEN');
-  if (!/^Linro_[A-Za-z0-9_-]{43}$/.test(token)) {
-    throw new Error('Invalid Linro token format.');
-  }
+  if (!/^Linro_[A-Za-z0-9_-]{43}$/.test(token)) throw new Error('Invalid token format.');
   const headers = {
-    'Accept': 'application/json',
-    'Authorization': `Bearer ${token}`,
+    Accept: 'application/json',
+    Authorization: `Bearer ${token}`,
     'CF-Access-Client-Id': required('CF_ACCESS_CLIENT_ID'),
     'CF-Access-Client-Secret': required('CF_ACCESS_CLIENT_SECRET')
   };
   async function get(path) {
-    const url = new URL(`/Linro/v1${path}`, origin);
-    const response = await fetch(url, {
+    const response = await fetch(new URL(`/Linro/v1${path}`, origin), {
       headers, redirect: 'manual', signal: AbortSignal.timeout(20000)
     });
     const requestId = response.headers.get('x-request-id') || 'unavailable';
-    if (response.status >= 300 && response.status < 400) {
-      throw new Error(`Authentication redirect (${response.status}); not followed.`);
-    }
-    if (!(response.headers.get('content-type') || '').includes('application/json')) {
-      throw new Error(`Non-JSON response (${response.status}); request_id=${requestId}`);
+    if (response.status >= 300 && response.status < 400) throw new Error('Authentication redirect; not followed.');
+    if (!response.headers.get('content-type')?.includes('application/json')) {
+      throw new Error(`Non-JSON HTTP ${response.status}; request_id=${requestId}`);
     }
     const result = await response.json();
     if (!response.ok || result.ok !== true) {
-      throw new Error(`${result.error?.code || 'http_error'} (${response.status}); request_id=${requestId}`);
+      throw new Error(`${result.error?.code || 'http_error'}; request_id=${requestId}`);
     }
     return result.data;
   }
   const session = await get('/session');
-  console.log({ version: session.version, scope: session.link_write_scope });
-  const links = await get('/links?limit=10&page=1');
-  console.log({ total: links.total, displayed: links.items.length });
-  // Do not log short-link targets, plain-text content, or any token by default.
+  const links = await get('/links?pagination=cursor&view=picker&limit=10');
+  console.log({ version: session.version, displayed: links.items.length, hasMore: links.next_cursor !== null });
 }
-main().catch(error => {
-  console.error(error instanceof Error ? error.message : 'Client failed.');
-  process.exitCode = 1;
-});
+main().catch(error => { console.error(error.message); process.exitCode = 1; });
 ```
 
-These examples are written against this release’s API and must be reviewed before use. Create / update calls modify data; use dedicated acceptance records and never point them directly at existing business links.
+This example does not follow authentication redirects, retry writes, or log targets, text bodies, or credentials. It demonstrates one page; continue with returned cursors only if your task requires more.
 
-<a id="troubleshooting"></a>
+<a id="errors"></a>
 
-## 16 · Common Failures and Error Codes
+## 6. Error reference
 
-<a id="section-16-1"></a>
+The first failed authentication/validation step usually determines the error. This table covers actionable admin codes; public form responses do not always use the same JSON envelope.
 
-### 16.1 Troubleshooting by Symptom
-
-| Symptom | Check first | Do not do this |
+| HTTP | Code | What to check |
 | --- | --- | --- |
-| GUI opens but shows login expired; API returns HTML / 302 | Access session, full-host protection, Origin, and whether the client is incorrectly following redirects | Do not interpret HTML parse failure as “no links”; do not expose Admin API to bypass Access |
-| Access allows the request but Linro returns 403 | Whether the user is enabled, email was preregistered, and access_sub changed | Do not trust a visitor-supplied email header and do not remove Owner protection directly |
-| First Owner is not auto-created | Whether the users table is truly empty and whether normalized email case matches bootstrap | Do not clear an existing users table just to force reinitialization |
-| A script with a token still returns 401 | Both authentication layers, full token prefix / length, expiry / revocation, and whether the user is disabled | Do not send only Access service credentials and do not manually rewrite an old token prefix |
-| An Owner token cannot modify someone else’s link | All tokens are limited to owned writes; use interactive Owner or the corresponding dedicated user | Do not elevate tokens to management scopes or remove created_by checks |
-| Page reports a version conflict | Compare the newest version and submitted fields | Do not automatically replay the entire stale object |
-| Public-domain health is 200 but a short code is 404 | D1 domain record, slug case, domain / link enabled state, expiration policy | Do not treat health as proof of a DB query and do not rebuild DNS to fix business-record errors |
-| Enabling timezone collection causes widespread 503 | Whether Redirect has a valid BROWSER_CHECK_SECRET and whether both sides run matching versions | Do not replace the new root with the password root; do not add source-code fallback to unprotected redirect |
-| Passwords worked before upgrade but all now fail | Whether the original LINK_PASSWORD_SECRET was preserved and database hashes are unchanged | Do not generate a random replacement root and do not delete password fields to restore access |
-| Browser check repeats or returns 403 | Blocked cookie, expired challenge, duplicate marker, rule change, network-context change, static-resource version mismatch | Do not merely add `_Linro_check=1` to bypass validation; do not call every false positive definitive VPN proof |
-| A browser without JavaScript cannot complete the final cross-site redirect | Native form 303 and CSP limitations; validate using the project’s normal JS navigation flow | Do not remove CSP globally just to hide the regression |
-| KV is configured but D1 is still queried | That is the intended d1-guarded cache design | Do not claim KV hits avoid D1; do not use cache as an authorization source when D1 is unreachable |
-| Analytics says “not configured” / empty / error | Check available, switches, dataset, account ID, Admin query secret, and actual events separately | Do not display available:false or query failure as zero clicks |
-| /stats is slow and GUI errors after 20 seconds | Eight sequential queries and a 10-second budget for each upstream query | Do not automatically retry at high frequency and amplify upstream 429s |
-| Archive has no data for today / no timezone breakdown | Cron policy for the previous two complete UTC days, cursor, and existing daily_stats | Do not expect archive API to reproduce every AE historical dimension |
-| Deleting a domain returns 409 | Links still reference it; move them first or delete them with proper authorization | Do not manually disable foreign-key enforcement |
-| TLS / custom-domain problem | Check SNI, DNS, certificate, and platform status while preserving health-check evidence | Do not disable TLS verification and do not routinely unbind/rebind or redeploy in a loop |
+| 400 | `invalid_json`, `empty_body` | A nonempty valid UTF-8 JSON object |
+| 400 | `unknown_field` | Remove undeclared/read-only fields |
+| 400 | `invalid_field` | Type, numeric range, required version, or string limit |
+| 400 | `invalid_slug` | Syntax or reserved namespace |
+| 400 | `invalid_url`, `invalid_hostname`, `invalid_email` | Use the relevant field's exact format |
+| 400 | `invalid_code`, `invalid_query_mode` | Supported numeric status or query enum |
+| 400 | `internal_target`, `private_target`, `redirect_chain` | Use an allowed final destination |
+| 400 | `unsafe_query_mode` | Sensitive destinations require discard |
+| 400 | `domain_not_found`, `admin_hostname` | Existing public domain, separate from admin |
+| 400 | `invalid_geo_rules`, `duplicate_geo_rule` | Rule structure, count, code, uniqueness |
+| 400 | `invalid_response_mode`, `invalid_text_content`, `text_geo_conflict` | Correct text/redirect fields and empty text-mode geo rules |
+| 400 | `invalid_block_vpn`, `invalid_link_password` | Protection field type and bounds |
+| 400 | `invalid_status`, `search_too_long` | List filter or final escaped 50-byte LIKE pattern |
+| 400 | `invalid_view`, `invalid_stats_view` | Supported list/statistics view; one stats view value |
+| 400 | `invalid_pagination`, `invalid_cursor` | Paging mode/mix and opaque cursor |
+| 400 | `invalid_link_id` | Analytics selector syntax, count, repetition, or mixed forms |
+| 400 | `invalid_import`, `invalid_batch`, `invalid_action`, `duplicate_item` | Batch shape/action/count/uniqueness |
+| 400 | `invalid_role`, `invalid_name` | Role or nonblank name requirements |
+| 400 | `https_required` | Production HTTPS origin |
+| 401 | `access_required` | Access JWT missing |
+| 401 | `invalid_access_token` | JWT signature, algorithm, issuer/audience, or time validation |
+| 401 | `invalid_token` | Full Linro token, expiry/revocation, and enabled owner user |
+| 401 | `local_token_required` | Local development token |
+| 403 | `user_not_allowed`, `human_identity_required` | Enabled/bound human identity, or service client with Linro token |
+| 403 | `forbidden`, `invalid_scopes` | Role/token permission and grantable scopes |
+| 403 | `interactive_only` | Use the signed-in human session, not a token |
+| 403 | `link_owner_required` | Editor/token writes are limited to its user-owned links |
+| 403 | `cross_origin`, `csrf` | Exact admin Origin and interactive CSRF header |
+| 404 | `not_found`, `api_not_found` | Resource ID or method/path |
+| 404 | `stats_link_not_found` | Refresh the explicit analytics selection |
+| 408 | `request_aborted` | Caller cancelled; request may no longer have a recipient |
+| 409 | `conflict` | Duplicate slug/domain/email |
+| 409 | `version_conflict` | Reload and compare before resubmitting |
+| 409 | `in_use` | Referenced resource or domain still containing links |
+| 409 | `last_owner` | Keep at least one enabled Owner |
+| 409 | `token_limit` | Revoke unused non-revoked token records |
+| 409 | `hostname_is_destination` | Migrate saved targets before registering that short-link host |
+| 413 | `body_too_large` | Actual body size limit |
+| 414 | `uri_too_long` | Request/combined destination length |
+| 415 | `content_type` | Admin JSON versus public form content type |
+| 421 | `wrong_host` | Request URL origin differs from configured admin origin |
+| 429 | `rate_limited` | Respect Retry-After and distinguish confirmed pre-write rejection from uncertain writes |
+| 500 | `internal_error` | Preserve a redacted request ID; investigate server-side failure |
+| 502 | `analytics_query_failed` | Provider HTTP/JSON/count failure |
+| 503 | `access_not_configured`, `access_keys_unavailable` | Access configuration or signing-key availability |
+| 503 | `link_password_unconfigured`, `invalid_password_record` | Password root or stored verifier |
+| 503 | `browser_check_unconfigured` | Browser root/configuration before enabling protection |
+| 503 | `assets_missing`, `rate_limit_not_configured` | Dashboard build or production limiter bindings |
+| 503 | `security_policy_invalid` | Deployment policy values/JSON |
+| 503 | `analytics_not_configured` | Analytics query prerequisites |
+| 504 | `analytics_timeout` | Shared provider deadline |
 
-<a id="section-16-2"></a>
+Public browser parsing can additionally return `browser_form_type`, `invalid_browser_form`, and other form-specific codes. Use the actual response and the corresponding module; never interpret an unknown error as success.
 
-### 16.2 Admin Error Code Quick Reference
+## 7. Implementation map
 
-This table lists major actionable errors but does not guarantee every public plain-text response carries error.code; one request usually returns the first authentication / validation failure reached.
+Routes/scopes are in `apps/admin/src/worker/api.ts`; each `*-api.ts` owns its resource handlers. Link fields are normalized in `link-fields.ts`; list paging is in `list-pagination.ts`, `link-list.ts`, `stats-archive.ts`, and `audit-api.ts`. Permissions are in `auth.ts`, statistics in `analytics*.ts`, and public flows in `apps/redirect/src/` plus shared password/browser/policy modules.
 
-| HTTP | error.code | Meaning and handling |
-| --- | --- | --- |
-| 400 | `invalid_json`, `empty_body` | JSON must be a valid UTF-8 object and body cannot be empty |
-| 400 | `unknown_field` | Remove undeclared or read-only fields; do not send a GET object back unchanged |
-| 400 | `invalid_field` | Invalid numeric range, type, version, or generic string |
-| 400 | `invalid_slug` | Invalid slug syntax / reserved word |
-| 400 | `invalid_url`, `invalid_hostname`, `invalid_email` | Submit URL, hostname, and email according to model rules |
-| 400 | `invalid_code`, `invalid_query_mode` | Choose a supported numeric redirect code or query enum |
-| 400 | `internal_target`, `private_target`, `redirect_chain` | Target is admin, an unapproved private address, or a managed short-link domain; use a reviewed final target |
-| 400 | `unsafe_query_mode` | Sensitive auth / reset / redirect targets must use discard |
-| 400 | `domain_not_found`, `admin_hostname` | Choose an existing business domain; the admin domain cannot be used |
-| 400 | `invalid_geo_rules`, `duplicate_geo_rule` | Invalid geo-rule structure, count, code, or duplicate item |
-| 400 | `invalid_response_mode`, `invalid_text_content`, `text_geo_conflict` | Invalid body type / length, or text mode still retains geo rules |
-| 400 | `invalid_block_vpn`, `invalid_link_password` | Protection field type or password constraints are not satisfied |
-| 400 | `invalid_status`, `search_too_long` | List filter or search term too long |
-| 400 | `invalid_link_id` | Analytics selector is empty, malformed, over 50 items, repeated, or mixes both selection parameters |
-| 400 | `invalid_import`, `invalid_batch`, `invalid_action`, `duplicate_item` | Invalid import / bulk structure or item count |
-| 400 | `invalid_role`, `invalid_name` | Invalid user role or site / token name |
-| 400 | `https_required` | Production admin requests must use HTTPS |
-| 401 | `access_required` | Worker did not receive a valid Access entry authentication header |
-| 401 | `invalid_access_token` | Access JWT signature, algorithm, claims, time, issuer, or audience did not validate |
-| 401 | `invalid_token` | Application-token format, existence, expiry / revocation, or user state failed validation |
-| 401 | `local_token_required` | Local only: development token missing or wrong |
-| 403 | `user_not_allowed`, `human_identity_required` | User is disabled / identity mismatched, or service identity lacks a Linro token |
-| 403 | `forbidden`, `invalid_scopes` | Current scope is insufficient, or token creation requests scopes beyond authority |
-| 403 | `interactive_only` | A token is calling an interactive-only endpoint |
-| 403 | `link_owner_required` | Editor / token is trying to write a link created by another user |
-| 403 | `cross_origin`, `csrf` | Origin or CSRF header does not meet requirements |
-| 404 | `not_found`, `api_not_found` | Resource does not exist, or route / method is unsupported |
-| 404 | `stats_link_not_found` | At least one link selected for analytics no longer exists |
-| 409 | `conflict` | Unique conflict on slug, hostname, or email |
-| 409 | `version_conflict` | Optimistic-lock conflict; refresh, compare, then resubmit |
-| 409 | `in_use` | Resource is still referenced by a foreign key or referenced target no longer exists |
-| 409 | `last_owner` | Operation would remove the final enabled Owner |
-| 409 | `token_limit` | 50 non-revoked token records already exist; revoke unused ones first |
-| 409 | `hostname_is_destination` | New domain is already referenced by an existing default / geo target; migrate target first |
-| 413 | `body_too_large` | Body exceeds endpoint limit |
-| 414 | `uri_too_long` | Final combined URL is too long |
-| 415 | `content_type` | Admin API requires application/json; password POST separately requires form content type |
-| 421 | `wrong_host` | Admin request Origin differs from ADMIN_ORIGIN |
-| 429 | `rate_limited` | Admin API authentication-stage or write limiter triggered; inspect Retry-After and do not high-frequency retry automatically |
-| 500 | `internal_error` | Unmapped Admin exception, including some D1 or upstream-network failures; preserve request_id |
-| 502 | `analytics_query_failed` | AE upstream HTTP, shape, or count validation failed |
-| 503 | `access_not_configured`, `access_keys_unavailable` | Access configuration invalid or signing public key temporarily unavailable |
-| 503 | `link_password_unconfigured`, `invalid_password_record` | Password root secret missing or stored verifier malformed |
-| 503 | `browser_check_unconfigured` | Browser-check capability is not configured before enabling the per-link policy |
-| 503 | `assets_missing`, `rate_limit_not_configured` | Admin static assets or production write-limiter binding missing; inspect build and bindings |
-| 503 | `security_policy_invalid` | Deployment security-policy JSON, fields, or allowed values invalid |
-
-Public browser forms can additionally return `browser_form_type`, `invalid_browser_form` and other dedicated errors. Do not debug a form request using Admin JSON assumptions. Source also has dedicated errors for private targets / managed domains and related checks; use the actual response plus request_id to locate the matching validation function. This table is for troubleshooting, not a reason to ignore unknown errors or treat them as success.
-
-**Basis:** `packages/shared/src/http.ts`, `validation.ts`, `policy.ts`, `destination.ts`, `access.ts`, `link-password.ts`; `apps/admin/src/worker/auth.ts`, `index.ts`, `api.ts`, `analytics.ts`; `apps/redirect/src/browser-page.ts`.
+See [Documentation sources](SOURCES.en-US.md) for platform references and [Protocol identifiers](PROTOCOL-v1.0.2.en-US.md) for intentional version compatibility. The setup guide is the place for deployment instructions; this reference is the single maintained home of detailed API contracts.

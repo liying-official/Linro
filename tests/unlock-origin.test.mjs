@@ -5,7 +5,7 @@ import { featureFixture, createLink, PASSWORD, request, count, cookie } from './
 import { checkCSRF } from '../.build/apps/admin/src/worker/auth.js';
 import { isSameOriginUnlock } from '../.build/apps/redirect/src/unlock-origin.js';
 
-for (const [name, headers] of acceptedOrigins) test(`D2 accepts ${name} but still verifies password, D1 revision and quota`, async t => {
+for (const [name, headers] of acceptedOrigins) test(`accepts ${name} but still verifies password, D1 revision and quota`, async t => {
   const { env, domain } = await featureFixture(t, { kv: true });
   const link = await createLink(env, domain, { password: PASSWORD, max_redirects: 2 });
   env.ENVIRONMENT = 'production'; env.ADMIN_ORIGIN = 'https://admin.example.com';
@@ -22,7 +22,7 @@ for (const [name, headers] of acceptedOrigins) test(`D2 accepts ${name} but stil
   const revoked = await request(env, '/docs', { headers: { cookie: cookie(unlocked) } });
   assert.equal(revoked.status, 200); assert.equal(revoked.headers.get('location'), null); assert.equal(count(env, link.id), 1);
 });
-for (const [name, headers] of [...deniedOrigins, ...deniedOriginsNodeOnly]) test(`D2 rejects ${name} without password work, cookie, Location or count`, async t => {
+for (const [name, headers] of [...deniedOrigins, ...deniedOriginsNodeOnly]) test(`rejects ${name} without password work, cookie, Location or count`, async t => {
   let attempts = 0;
   const { env, domain } = await featureFixture(t, { kv: true, PASSWORD_LIMITER: { limit: async () => { attempts++; return { success: true }; } } });
   const link = await createLink(env, domain, { password: PASSWORD, max_redirects: 2 });
@@ -32,13 +32,13 @@ for (const [name, headers] of [...deniedOrigins, ...deniedOriginsNodeOnly]) test
   assert.match(r.headers.get('cache-control'), /no-store/); assert.equal(r.headers.get('referrer-policy'), 'no-referrer');
   assert.equal(attempts, 0); assert.equal(count(env, link.id), 0);
 });
-test('D2 denied form message is bilingual and does not echo attacker-controlled headers or queries', async t => {
+test('denied form message is bilingual and does not echo attacker-controlled headers or queries', async t => {
   const { env, domain } = await featureFixture(t); await createLink(env, domain, { password: PASSWORD });
   const r = await request(env, '/__Linro_unlock/docs?_Linro_lang=zh-CN&target=unsafe', { method: 'POST', headers: { origin: 'https://evil.example', 'sec-fetch-site': 'same-origin', 'content-type': 'application/x-www-form-urlencoded' }, body: 'password=' + PASSWORD });
   assert.equal(r.status, 403); assert.equal(r.headers.get('content-language'), 'zh-CN');
   assert.equal(await r.text(), '请从短链密码页提交。');
 });
-test('D2 opaque-origin allowance does not bypass wrong password, form bounds or password rate limiting', async t => {
+test('opaque-origin allowance does not bypass wrong password, form bounds or password rate limiting', async t => {
   const { env, domain } = await featureFixture(t); const link = await createLink(env, domain, { password: PASSWORD, max_redirects: 2 });
   const headers = { origin: 'null', 'sec-fetch-site': 'same-origin', 'content-type': 'application/x-www-form-urlencoded' };
   for (const [body, status, type] of [['password=wrong-long-password', 401], ['password=a&password=b', 400], ['password=' + 'x'.repeat(8192), 413], [JSON.stringify({ password: PASSWORD }), 415, 'application/json']]) {
@@ -49,7 +49,7 @@ test('D2 opaque-origin allowance does not bypass wrong password, form bounds or 
   assert.equal((await request(env, '/__Linro_unlock/docs', { method: 'POST', headers, body: new URLSearchParams({ password: PASSWORD }).toString() })).status, 429);
   assert.equal(count(env, link.id), 0);
 });
-for (const method of ['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS']) test(`D2 ${method} unlock endpoint is uniform 405 Allow:POST and does no D1 work`, async t => {
+for (const method of ['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS']) test(`${method} unlock endpoint is uniform 405 Allow:POST and does no D1 work`, async t => {
   const { env, domain } = await featureFixture(t); await createLink(env, domain, { password: PASSWORD });
   env.DB.queries.length = 0;
   for (const slug of ['docs', 'absent']) {
@@ -59,7 +59,7 @@ for (const method of ['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS']) test(`D2 ${met
   }
   assert.equal(env.DB.queries.length, 0);
 });
-test('D2 does not relax the existing Admin Access-session CSRF guard', () => {
+test('does not relax the existing Admin Access-session CSRF guard', () => {
   // Local development secrets are explicit credentials, not ambient Access
   // cookies. Test the Access principal here; access.test covers real RSA flow.
   const env = { ADMIN_ORIGIN: 'https://admin.example.com' };
@@ -73,7 +73,7 @@ test('D2 does not relax the existing Admin Access-session CSRF guard', () => {
     method: 'POST', headers: { Origin: env.ADMIN_ORIGIN, 'Sec-Fetch-Site': 'same-origin', 'X-Linro-CSRF': '1' },
   }), principal, env));
 });
-test('D2 check is exact for port and scheme and cannot normalize a foreign Origin into an allow', () => {
+test('check is exact for port and scheme and cannot normalize a foreign Origin into an allow', () => {
   assert.equal(isSameOriginUnlock(new Request('https://go.example.com:444/__Linro_unlock/docs', { method: 'POST', headers: { origin: 'https://go.example.com:444' } })), true);
   assert.equal(isSameOriginUnlock(new Request('https://go.example.com:444/__Linro_unlock/docs', { method: 'POST', headers: { origin: 'https://go.example.com', 'sec-fetch-site': 'same-origin' } })), false);
 });

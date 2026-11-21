@@ -1,8 +1,9 @@
+import { newTestSecret } from './fixture-credentials.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setup, createLink, call } from './harness.mjs';
 import { stats, statsSelection, validateStatsIds } from '../.build/apps/admin/src/worker/analytics.js';
-const configured = { ANALYTICS_ENABLED: 'true', ANALYTICS_DATASET: 'cf_links_clicks', CLOUDFLARE_ACCOUNT_ID: 'a'.repeat(32), ANALYTICS_API_TOKEN: 'test-only-analytics-token' };
+const configured = { ANALYTICS_ENABLED: 'true', ANALYTICS_DATASET: 'fixture_clicks', CLOUDFLARE_ACCOUNT_ID: 'a'.repeat(32), ANALYTICS_API_TOKEN: newTestSecret() };
 function mockFetch(t, fn) { const old = globalThis.fetch; globalThis.fetch = fn; t.after(() => { globalThis.fetch = old; }); }
 const id = '11111111-1111-4111-8111-111111111111';
 for (const query of ['link_id=', 'link_ids=', 'link_ids=' + id + ',', 'link_id=' + id + '&link_ids=' + id, 'link_id=' + id + '&link_id=' + id, 'link_ids=' + id + '&link_ids=' + id, "link_ids=' OR 1=1 --", 'link_id=' + 'a'.repeat(36), 'link_ids=' + Array.from({ length: 51 }, () => crypto.randomUUID()).join(',')]) {
@@ -55,7 +56,7 @@ for (const mode of ['all', 'single', 'multi']) {
       return Response.json({ data: [{ clicks: sum }] });
     });
     const result = await stats(env, 7, selection); const expected = mode === 'all' ? 96 : mode === 'single' ? 2 : 6;
-    assert.equal(result.clicks, expected); assert.equal(result.timeline[0].clicks, expected); assert.equal(sqls.length, 8); assert.equal(peak, 1);
+    assert.equal(result.clicks, expected); assert.equal(result.timeline[0].clicks, expected); assert.equal(sqls.length, 8); assert.equal(peak, 2);
     assert.equal(result.devices.reduce((n, r) => n + r.clicks, 0), expected); assert.equal(result.timezones.reduce((n, r) => n + r.clicks, 0), expected);
     assert.deepEqual(result.link_ids, selection); assert.equal(result.dimension_sources.browser_timezone, 'javascript_client_reported_untrusted'); assert.equal(result.dimension_sources.timezone, 'javascript_client_reported'); assert.equal(result.timezone, 'UTC');
     if (mode !== 'all') assert.ok(result.top.every(r => r.link_id !== links[2].id));

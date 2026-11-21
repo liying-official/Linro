@@ -1,55 +1,78 @@
-# 🔗 Linro
+# Linro
 
-**Open-source short links and multi-domain management on Cloudflare.**
+**Your own short links, on your own domains, with a Chinese and English dashboard.**
 
-Current version: **v1.0.1**.
+Current release: **v1.0.2** · [简体中文](README.md)
 
-[简体中文](README.md) · [Deployment guide](https://liying-official.github.io/Linro/?lang=en#install) · [Documentation](https://liying-official.github.io/Linro/?lang=en) · [API reference](https://liying-official.github.io/Linro/?lang=en#api-reference)
+A short link is a small signpost: `https://go.example.com/welcome` points visitors to a longer address. Linro lets you create that signpost, change its destination, and decide who can use it. It runs in your Cloudflare account; you do not maintain a traditional server.
 
-[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](https://liying-official.github.io/Linro/?lang=en#architecture)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://liying-official.github.io/Linro/?lang=en#architecture)
-[![License: AGPL-3.0-only](https://img.shields.io/badge/License-AGPL--3.0--only-blue)](LICENSE)
+`example.com`, `example.org`, and the other example addresses in this repository are placeholders. They do not identify the project's operator or a working deployment.
 
-Create short links on your own domains and manage links, members, and access rules from one bilingual dashboard. Linro runs in your Cloudflare account, with separate admin and public-redirect Workers and no traditional server to maintain.
+## What can it do?
 
-## ✨ Why Linro
+- Manage up to 50 public short-link domains from one dashboard.
+- Create readable short codes, or let Linro generate one.
+- Redirect visitors with 301, 302, 307, or 308; alternatively, show a small plain-text message.
+- Add a password, an expiry time, an enable/disable switch, or a limit on authorized requests.
+- Choose different destinations by country or continent.
+- Import and export JSON/CSV, manage team roles, and review changes in an audit log.
+- Add optional Analytics Engine statistics, KV route caching, and browser checks when you need them.
 
-- **Multiple domains, one dashboard.** Manage up to 50 public short-link domains with custom or generated slugs. The same slug can be used independently on different domains.
-- **Access controls for teamwork.** Cloudflare Access protects the admin entry point. Owner, Admin, Editor, and Viewer roles work alongside scoped application tokens for collaboration and automation.
-- **More than redirects.** Use 301 / 302 / 307 / 308 redirects or serve plain text directly. Redirect links can select destinations by country or continent.
-- **Rules for individual links.** Configure passwords, expiration, enablement, and authorized-request limits—not just a shorter address.
-- **Bulk management and data portability.** Enable, disable, or delete links in bulk; import and export JSON / CSV; and review administrative actions in the audit log.
-- **Optional services, configured as needed.** Add KV route caching, Analytics Engine statistics, and browser-timezone collection to suit your deployment.
+The dashboard is a **shared team workspace**. A Viewer can read the team's destinations and plain-text content. A password on a public short link does not hide its content from authorized dashboard members. See [security boundaries](docs/SECURITY.en-US.md).
 
-> [!NOTE]
-> Linro supports individuals and teams sharing a workspace; it does not isolate data between members. Members with read access can view workspace links. See the [security guide](docs/SECURITY.en-US.md) for permissions and access boundaries.
+## Pick your starting point
 
-## 🧪 WebGUI Demo
+| You want to… | Start here |
+| --- | --- |
+| Click around without a Cloudflare account | [Static demo instructions](docs/DEMO.en-US.md) |
+| Run the real application on your own computer | [Local setup](docs/GUIDE.en-US.md#local-setup) |
+| Put Linro on your own domains | [Production setup](docs/GUIDE.en-US.md#production-setup) |
+| Update an existing installation | [Backup and upgrade](docs/GUIDE.en-US.md#backup-and-upgrade) |
+| Write a script that uses Linro | [API reference](docs/API.en-US.md) |
 
-**[Open the static demo →](https://liying-official.github.io/Linro/demo/)** · Password: **`Linro`**
+For local development, install **Node.js 22.16.0 or newer** and npm. From the extracted project folder, start with:
 
-Explore the bilingual admin UI with fictional links, domains, statistics, and role switching. Actions run in page memory, reset on refresh, and never connect to a live API. The password demonstrates the workflow; it does not protect secrets. Do not enter real information. [Demo details](docs/DEMO.en-US.md)
+```bash
+npm ci
+npm run local:init
+```
 
-## 🚀 Get started
+These two commands install the locked dependencies and prepare private local settings. Follow the [remaining local steps](docs/GUIDE.en-US.md#local-setup) to build the dashboard, create local tables, and start both services. They do not deploy Linro to Cloudflare.
 
-**[Open the HTML deployment guide →](https://liying-official.github.io/Linro/?lang=en#install)**
+For production, you also need a Cloudflare account, domains you control, a D1 database, and a Cloudflare Access application for dashboard login. The guide explains each part before using it.
 
-The bilingual HTML documentation covers first installation, Cloudflare resources, multiple domains, and optional services. For an existing instance, follow the [upgrade guide](https://liying-official.github.io/Linro/?lang=en#upgrade).
+## How the pieces fit together
 
-For offline reading, download the project or documentation package and open `docs/index.html` in a browser. Language switching, search, and printing are available there.
+Think of Linro as a small office:
 
-## 📚 Documentation
+| Piece | Its job |
+| --- | --- |
+| **Admin Worker** | The staff desk: dashboard, users, settings, and API |
+| **Redirect Worker** | The signpost: receives public short-link visits |
+| **D1** | The shared notebook: stores links, rules, users, and audit records |
+| **Access** | The door attendant: checks who can enter the staff area |
 
-[Using the dashboard](https://liying-official.github.io/Linro/?lang=en#usage) · [Configuration](https://liying-official.github.io/Linro/?lang=en#configuration) · [Members and permissions](https://liying-official.github.io/Linro/?lang=en#permissions) · [API reference](https://liying-official.github.io/Linro/?lang=en#api-reference) · [Troubleshooting](https://liying-official.github.io/Linro/?lang=en#troubleshooting)
+KV and Analytics Engine are optional. Public examples start with analytics, global timezone collection, device-header collection, and KV disabled. Basic requests still use Workers and D1; check your account's current limits and usage before choosing optional features.
 
-## 🧱 Built with
+## Documentation
 
-Cloudflare Workers · D1 · Access · React · TypeScript · Vite · Tailwind CSS · TailAdmin · Recharts. KV and Analytics Engine are optional services.
+| Document | What you will learn |
+| --- | --- |
+| [User and deployment guide](docs/GUIDE.en-US.md) | Install, create links, manage a team, configure features, and troubleshoot |
+| [API reference](docs/API.en-US.md) | Authentication, all 25 admin routes, fields, examples, and errors |
+| [Demo](docs/DEMO.en-US.md) | Try the interface with fictional data |
+| [Security](docs/SECURITY.en-US.md) | What protection does, what it does not do, and how to report a problem |
+| [Retention](docs/RETENTION.en-US.md) | Inspect database growth and review bounded cleanup statements |
+| [Release guide](docs/RELEASE.en-US.md) | Build the offline docs and prepare a clean source package |
+| [Protocol identifiers](docs/PROTOCOL-v1.0.2.en-US.md) | Stable paths, headers, cookies, and upgrade compatibility |
+| [Documentation sources](docs/SOURCES.en-US.md) | Find the implementation and official platform references |
 
-## 🤝 Contributing
+GitHub renders the Markdown files above directly. To read everything offline, download the repository and open `docs/index.html` in a browser. The offline page provides language switching, search, and printing. The JavaScript demo needs an HTTP server; see its instructions.
 
-Issues, feature suggestions, and pull requests are welcome. For security findings involving credentials or user data, follow the [security reporting guidance](docs/SECURITY.en-US.md#reporting) rather than including sensitive details in a public issue.
+## Contributing
 
-## 📄 License
+Bug reports and pull requests are welcome. Include the version, what you expected, and a small example using fictional data. For a security problem, follow the [private reporting instructions](docs/SECURITY.en-US.md#reporting); keep credentials and user data out of public issues.
 
-Linro is licensed under **[AGPL-3.0-only](LICENSE)**. MIT notices for TailAdmin and Recharts are retained in [LICENSES](LICENSES/). Other copyright and permission notices are included in [NOTICE](NOTICE); see the [licensing guide](docs/LICENSING.en-US.md) for Corresponding Source information.
+## License
+
+Linro uses [AGPL-3.0-only](LICENSE). The TailAdmin and Recharts MIT notices are in [LICENSES](LICENSES/); attribution is in [NOTICE](NOTICE). Read [Licensing and Corresponding Source](docs/LICENSING.en-US.md) before publishing a modified deployment.

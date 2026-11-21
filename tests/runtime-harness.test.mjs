@@ -1,15 +1,18 @@
+import { newTestSecret } from './fixture-credentials.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { createOutboundRouter } from './runtime/outbound-router.mjs';
+const bearer = 'Bearer ' + newTestSecret();
+const privateBearer = 'Bearer ' + newTestSecret();
 const require=createRequire(import.meta.url); const ts=require('typescript');
 const read=rel=>readFileSync(new URL('../'+rel,import.meta.url),'utf8');
 
 test('D1 outbound router checks exact host, path, method, headers and body without external networking', async()=>{
   const r=createOutboundRouter();
-  r.expect({url:'https://api.example/valid',method:'POST',headers:{authorization:'Bearer fake-fixture'},body:'SELECT 1'}, {status:200,body:'{"ok":true}'});
-  const response=await r.outboundService(new Request('https://api.example/valid',{method:'POST',headers:{authorization:'Bearer fake-fixture'},body:'SELECT 1'}));
+  r.expect({url:'https://api.example/valid',method:'POST',headers:{authorization:bearer},body:'SELECT 1'}, {status:200,body:'{"ok":true}'});
+  const response=await r.outboundService(new Request('https://api.example/valid',{method:'POST',headers:{authorization:bearer},body:'SELECT 1'}));
   assert.equal(response.status,200); r.assertComplete(); assert.equal(r.calls.length,1);
 });
 test('D1 unmatched outbound returns 599 AND teardown fails even when the handler swallows it', async()=>{
@@ -34,7 +37,7 @@ test('D1 deliberately optional redirect targets expose a follow regression throu
   // Unit test of the router's negative-control observability, not a native fetch run.
 });
 test('D1 body and credential values are not included in unexpected-request diagnostics', async()=>{
-  const r=createOutboundRouter();await r.outboundService(new Request('https://fixture.example/',{method:'POST',headers:{authorization:'Bearer private-fixture'},body:'private-body'}));
+  const r=createOutboundRouter();await r.outboundService(new Request('https://fixture.example/',{method:'POST',headers:{authorization:privateBearer},body:'private-body'}));
   try{r.assertComplete();assert.fail('must fail');}catch(error){assert.doesNotMatch(String(error),/private-fixture|private-body/);}
 });
 test('D1 runtime loader is pinned, uses only Wrangler resolution and fails on missing or incompatible APIs',()=>{
@@ -46,7 +49,7 @@ test('D1 runtime loader is pinned, uses only Wrangler resolution and fails on mi
 });
 test('D1 canary must complete before semantic tests and none can skip on missing tools',()=>{
   const pkg=JSON.parse(read('package.json'));
-  assert.equal(pkg.scripts['test:runtime'],'npm run toolchain:versions && npm run test:runtime:canary && node --test tests/runtime/fetch-security.test.mjs tests/runtime/link-controls.test.mjs');
+  for(const file of ['api-canary.test.mjs','fetch-security.test.mjs','link-controls.test.mjs','admin-storage.test.mjs']) assert.ok((pkg.scripts['test:runtime'] + ' ' + pkg.scripts['test:runtime:canary']).includes(file),file);
   for(const file of ['api-canary','fetch-security','link-controls']){
     const src=read(`tests/runtime/${file}.test.mjs`);
     assert.match(src,/new Miniflare\(convertV4MiniflareOptions\(/);

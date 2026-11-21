@@ -26,8 +26,8 @@ export const deniedOrigins = [
   ['wrong port', { origin: 'https://go.example.com:444', 'sec-fetch-site': 'same-origin' }],
 ];
 
-// D3: Node Request preserves a present-but-empty header. The deployed native
-// HTTP transport observed in the report drops empty/whitespace-only values.
+// Node Request preserves a present-but-empty header. The deployed native
+// HTTP transport drops empty/whitespace-only values.
 // Keep these policy cases explicit rather than silently filtering native tests.
 // tests/runtime/api-canary.test.mjs checks that transport behavior for drift.
 export const deniedOriginsNodeOnly = [

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { readFile, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Marked } from 'marked';
+import { documentationFiles, headingSlug } from '../scripts/build-docs.mjs';
 import { configs, validateConfig } from '../scripts/config-lib.mjs';
 import { SQLiteD1, setup, call, createLink, visit } from './harness.mjs';
 
@@ -14,7 +16,7 @@ const commands = blocks.filter(m => /^(?:bash|powershell)$/.test(m[1])).map(m =>
 // These tests inspect documented commands without contacting Cloudflare.
 
 test('bilingual documentation matches the shared release version', async () => {
-  assert.equal(pkg.version, '1.0.1'); // User-requested release name; no version-ordering logic.
+  assert.equal(pkg.version, '1.0.2');
   for (const file of ['README.md', 'README.en-US.md', 'docs/GUIDE.md', 'docs/GUIDE.en-US.md', 'docs/API.md', 'docs/API.en-US.md']) {
     assert.ok((await readFile(join(ROOT, file), 'utf8')).includes(`v${pkg.version}`), file);
   }
@@ -84,16 +86,35 @@ test('all documented diagnostic SQL executes as read-only against the actual sch
   } finally { db.close(); }
 });
 
-test('bilingual README and guide links resolve in the release, including HTML language queries', async () => {
- for (const file of ['README.md', 'README.en-US.md', 'docs/GUIDE.md', 'docs/GUIDE.en-US.md', 'docs/API.md', 'docs/API.en-US.md']) {
+test('every bilingual document link resolves in the release, including Markdown headings and language queries', async () => {
+ const parser = new Marked();
+ for (const file of new Set(documentationFiles(pkg.version).map(doc => doc.file))) {
   const document = await readFile(join(ROOT, file), 'utf8');
-  for (const m of document.matchAll(/\]\(([^)\s]+)\)/g)) {
-    const target = m[1];
-    if (/^https?:/.test(target)) continue;
-    const [relativeFile, anchor] = target.split('#');
-    const destination = new URL(relativeFile.split('?')[0] || file.split('/').at(-1), new URL(file, new URL('../', import.meta.url)));
+  const links = [];
+  parser.walkTokens(parser.lexer(document), token => {
+    if (token.type === 'link' || token.type === 'image') links.push(token.href);
+  });
+  for (const target of links) {
+    if (/^(?:https?:|mailto:)/.test(target)) continue;
+    assert.doesNotMatch(target, /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i, `${file}: unsafe link scheme`);
+    const destination = new URL(target, new URL(file, new URL('../', import.meta.url)));
+    const anchor = decodeURIComponent(destination.hash.slice(1));
+    destination.hash = ''; destination.search = '';
     await access(destination);
-    if (anchor) assert.ok((await readFile(destination, 'utf8')).includes(`id="${anchor}"`), `${file}: ${target}`);
+    if (anchor) {
+      const content = await readFile(destination, 'utf8');
+      const fragments = new Set([...content.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]));
+      if (destination.pathname.endsWith('.md')) {
+        const seen = new Map();
+        parser.walkTokens(parser.lexer(content), token => {
+          if (token.type !== 'heading') return;
+          const base = headingSlug(token.text), count = seen.get(base) ?? 0;
+          seen.set(base, count + 1);
+          fragments.add(base + (count ? '-' + count : ''));
+        });
+      }
+      assert.ok(fragments.has(anchor), `${file}: ${target}`);
+    }
   }
  }
   const html = await readFile(join(ROOT, 'docs/index.html'), 'utf8');

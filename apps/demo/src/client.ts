@@ -1,4 +1,5 @@
 export { APIError, api } from './store.mjs';
+import { OBJECT_URL_REVOKE_DELAY_MS } from '../../../packages/shared/src/limits';
 
 export function download(name: string, content: string, type: string): void {
   const href = URL.createObjectURL(new Blob([content], { type }));
@@ -8,5 +9,5 @@ export function download(name: string, content: string, type: string): void {
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
-  setTimeout(() => URL.revokeObjectURL(href), 5000);
+  setTimeout(() => URL.revokeObjectURL(href), OBJECT_URL_REVOKE_DELAY_MS);
 }

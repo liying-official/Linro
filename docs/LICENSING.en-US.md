@@ -1,27 +1,32 @@
-# Linro v1.0.1 Licensing and Corresponding Source
+# Licensing and sharing the source
 
-[简体中文](LICENSING.md) · [README](../README.en-US.md)
+[简体中文](LICENSING.md) · [README](../README.en-US.md) · [Release guide](RELEASE.en-US.md)
 
-## Project and third-party licenses
+Think of source code as the recipe for the running application. Linro's license explains when recipients and network users must be able to obtain that recipe, along with the material needed to build it.
 
-Linro as a whole uses **AGPL-3.0-only**, the GNU Affero General Public License version 3, without “or any later version.” The authoritative text is [LICENSE](../LICENSE). This page explains the project; it does not replace the license or legal advice about a particular deployment.
+## Which license applies?
 
-| Material | License and location |
+Linro uses **AGPL-3.0-only**: GNU Affero General Public License version 3, without the “or any later version” option. The full [LICENSE](../LICENSE) is authoritative. This page is a practical explanation, not a replacement for its terms.
+
+| Material | Notice to retain |
 | --- | --- |
-| TailAdmin React adaptations | `apps/admin/src/web/tailadmin/` retains [TailAdmin MIT](../LICENSES/TailAdmin-MIT.txt); see [NOTICE](../NOTICE) for the fixed upstream revision |
-| Recharts | [Recharts MIT](../LICENSES/Recharts-MIT.txt) |
-| Linro as a whole and other existing files | Their AGPL-3.0-only licensing and existing file notices remain applicable |
+| Linro as a whole | [AGPL-3.0-only](../LICENSE) and existing file notices |
+| Adapted TailAdmin React interface | [TailAdmin MIT notice](../LICENSES/TailAdmin-MIT.txt); upstream revision in [NOTICE](../NOTICE) |
+| Recharts | [Recharts MIT notice](../LICENSES/Recharts-MIT.txt) |
+| Other dependencies | Their own licenses and applicable notices |
 
-The MIT notices do not license Linro as a whole under MIT or revoke rights in previously received MIT versions. The supplied source and lockfile do not include ApexCharts or TailAdmin Pro; this is not a completed legal audit of every transitive dependency. Third-party dependencies retain their own licenses.
+The third-party MIT notices do not make the entire Linro project MIT-licensed. Keep `LICENSE`, `NOTICE`, and `LICENSES/*.txt` intact when redistributing. The provided source and lockfile do not include ApexCharts or TailAdmin Pro; this statement is not a legal audit of every transitive dependency.
 
-Keep `LICENSE`, `NOTICE`, and `LICENSES/*.txt` unchanged. Bilingual explanations do not replace attribution or invent authors, ownership claims, or exceptions.
+## What is “Corresponding Source”?
 
-## Network use and source_url
+For a modified version used over a network, AGPL section 13 addresses offering Corresponding Source to the people interacting with it. Review the full license for your use and distribution. In practical terms, publish the source matching the actual running version, together with required build and installation material. A moving default branch may no longer describe the deployed code.
 
-AGPL section 13 addresses offering Corresponding Source to users interacting with modified versions over a network. Review the complete terms applicable to your use and distribution, and provide complete source for the running version together with required build and installation materials.
+Private deployment credentials and user data are not the recipe. Publish clean templates and the lockfile, while keeping account settings, databases, passwords, and private keys out of the release. See [Security](SECURITY.en-US.md) and [Release](RELEASE.en-US.md).
 
-Deployment `source_url` maps to `SOURCE_URL` on both Workers. The application can display a source entry in the admin interface and public protection pages and attach a `Link` header with the `describedby` relation to wrapped responses. It does not upload, mirror, or verify the source.
+## Tell Linro where that source lives
 
-The URL must use HTTPS, be at most 2048 characters, omit credentials, query, fragment, whitespace, and backslashes, and not use the deployment's admin or short-link host. Public examples leave it empty; fill in the actual public source entry before production. `preflight` only warns on an empty value and does not establish publication, completeness, buildability, or legal compliance.
+Set `source_url` in your private deployment configuration. It becomes `SOURCE_URL` on both Workers. When present, Linro can show a source link in the dashboard and public protection pages and add a `Link` response header with `rel="describedby"`.
 
-Prefer the source of the actual deployed commit or release tag to a moving default branch. Publishing source does not require leaking account configuration, user data, databases, passwords, or private keys; retain the public templates and lockfile required for reproducible builds. Seek qualified advice about specific legal uncertainties.
+Use a public HTTPS URL for the deployed revision or release. It must be at most 2,048 characters, have no credentials, query, fragment, whitespace, or backslashes, and use a host different from this deployment's admin and short-link hosts.
+
+Public templates deliberately leave the value empty. Fill it before production use. `preflight` warns when it is empty; it does not upload source or prove that a nonempty URL is reachable, complete, reproducible, or legally sufficient. Verify the published source yourself. For a specific legal uncertainty, consult a qualified adviser using the complete license and deployment facts.

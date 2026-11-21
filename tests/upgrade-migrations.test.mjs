@@ -39,24 +39,26 @@ function applyPending(db) {
   return names;
 }
 
-test('I3 a database with only 0001/0002 requires both intermediate migrations in order', t => {
-  const db = seed(t); assert.deepEqual(pending(db), ['0003_text_responses.sql', '0004_browser_checks.sql']);
+test('a database with only 0001/0002 requires all later migrations in order', t => {
+  const db = seed(t);
+  const expected = ['0003_text_responses.sql', '0004_browser_checks.sql', '0005_link_kv_cache.sql', '0006_destination_hosts_and_archive.sql'];
+  assert.deepEqual(pending(db), expected);
   const before = {};
   for (const name of ['users','domains','links','api_tokens','audit_logs','settings']) before[name] = asObjects(db.prepare('SELECT * FROM ' + name).all());
-  assert.deepEqual(applyPending(db), ['0003_text_responses.sql', '0004_browser_checks.sql']);
+  assert.deepEqual(applyPending(db), expected);
   assert.deepEqual(pending(db), []);
   for (const name of ['users','domains','api_tokens','audit_logs','settings']) assert.deepEqual(asObjects(db.prepare('SELECT * FROM ' + name).all()), before[name]);
   const row = { ...db.prepare('SELECT * FROM links').get() };
-  assert.deepEqual(row, { ...before.links[0], response_mode: 'redirect', text_content: '', block_vpn: 0 });
+  assert.deepEqual(row, { ...before.links[0], response_mode: 'redirect', text_content: '', block_vpn: 0, kv_cache_ttl: null });
   assert.equal(row.rule_revision, 1); assert.equal(row.redirect_count, 3);
   assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
 });
 
-test('I3 all pending migrations extend the existing revision trigger without double increments', t => {
+test('all pending migrations extend the existing revision trigger without double increments', t => {
   const db = seed(t); applyPending(db);
   assert.equal(db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type='trigger' AND name='links_rule_revision'").get().n, 1);
   let revision = db.prepare('SELECT rule_revision FROM links').get().rule_revision;
-  for (const sql of ["UPDATE links SET response_mode='text'", "UPDATE links SET text_content='changed text'", 'UPDATE links SET block_vpn=1']) {
+  for (const sql of ["UPDATE links SET response_mode='text'", "UPDATE links SET text_content='changed text'", 'UPDATE links SET block_vpn=1', 'UPDATE links SET kv_cache_ttl=3600']) {
     db.exec(sql); assert.equal(db.prepare('SELECT rule_revision FROM links').get().rule_revision, ++revision);
   }
   db.exec('UPDATE links SET redirect_count=redirect_count+1');
@@ -64,16 +66,19 @@ test('I3 all pending migrations extend the existing revision trigger without dou
   assert.equal(db.prepare('SELECT redirect_count FROM links').get().redirect_count, 4);
 });
 
-test('I3 a fully migrated database has no pending work and must not be seeded or cleared', t => {
-  const db = seed(t, 4); const before = asObjects(db.prepare('SELECT * FROM links').all());
+test('a fully migrated database has no pending work and must not be seeded or cleared', t => {
+  const db = seed(t, migrations.length); const before = asObjects(db.prepare('SELECT * FROM links').all());
   assert.deepEqual(applyPending(db), []); assert.deepEqual(asObjects(db.prepare('SELECT * FROM links').all()), before);
   assert.equal(db.prepare('SELECT count(*) AS n FROM users').get().n, 1);
-  assert.equal(db.prepare('SELECT count(*) AS n FROM d1_migrations').get().n, 4);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM d1_migrations').get().n, migrations.length);
 });
 
-test('I3 audit steps include remote list before and after applying all pending migrations', () => {
+test('audit steps include remote list before and after applying all pending migrations', () => {
   const md = read('docs/GUIDE.md');
-  const section = md.slice(md.indexOf('### 8.1 '), md.indexOf('### 8.2 '));
+  const start = md.indexOf('<a id="upgrade"></a>');
+  const end = md.indexOf('<a id="troubleshooting"></a>', start);
+  assert.ok(start >= 0 && end > start, 'The upgrade guide must remain directly linkable.');
+  const section = md.slice(start, end);
   assert.match(section, /全部待应用迁移/);
   assert.match(section, /migrations list DB --remote[\s\S]*npm run db:migrate[\s\S]*migrations list DB --remote/);
   assert.match(md, /pragma_table_info\('links'\)/); assert.match(md, /type='trigger' AND name='links_rule_revision'/);
@@ -82,7 +87,7 @@ test('I3 audit steps include remote list before and after applying all pending m
 
 
 
-test('F1 keeps the existing CSP, narrow origin policy and actual Chromium CI regression', () => {
+test('keeps the existing CSP, narrow origin policy and actual Chromium CI regression', () => {
   const http = read('packages/shared/src/http.ts');
   assert.match(http, /form-action 'self'/); assert.match(http, /connect-src 'self'/);
   assert.doesNotMatch(http, /unsafe-inline|unsafe-eval|form-action \*/);

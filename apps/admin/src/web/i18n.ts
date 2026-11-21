@@ -15,6 +15,8 @@ export function detectLocale(): Locale {
 }
 
 export function applyLocale(locale: Locale) {
-  try { localStorage.setItem('cf-links-locale', locale); } catch {}
+  try {
+    localStorage.setItem('cf-links-locale', locale);
+  } catch {}
   if (typeof document !== 'undefined') document.documentElement.lang = locale;
 }

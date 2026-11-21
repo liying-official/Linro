@@ -1,3 +1,4 @@
+import { newTestSecret } from './fixture-credentials.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { environment, setup, call, createLink, admin, redirect } from './harness.mjs';
@@ -37,7 +38,7 @@ test('CSRF accepts only the new header, retaining same-origin and fetch-site con
 });
 
 test('new production cookie is host-bound and legacy cookie names do not grant access', async t => {
-  const { env, domain } = await setup({ LINK_PASSWORD_SECRET: 'p'.repeat(43) }); t.after(() => env.DB.close());
+  const { env, domain } = await setup({ LINK_PASSWORD_SECRET: newTestSecret() }); t.after(() => env.DB.close());
   const link = await createLink(env, domain, { slug: 'private' });
   const production = { ...env, ENVIRONMENT: 'production' };
   const issued = await issueUnlockCookie(link, 'go.example.com', production);

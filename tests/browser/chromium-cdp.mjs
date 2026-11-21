@@ -10,7 +10,16 @@ import { setTimeout as delay } from 'node:timers/promises';
 export async function until(probe, message, timeout = 15000) {
   const end = Date.now() + timeout;
   while (Date.now() < end) { const value = await probe(); if (value) return value; await delay(50); }
-  throw Error(message);
+  throw Error(typeof message === 'function' ? message() : message);
+}
+/** Both sources are emitted by the child launched for this temporary profile. */
+export function debugEndpoint(portFile,stderr) {
+  const [port,path] = portFile.trim().split(/\r?\n/);
+  const candidates = [port && path ? 'ws://127.0.0.1:'+port+path : '', /(?:^|\n)DevTools listening on (ws:\/\/[^\s]+)/.exec(stderr)?.[1] ?? ''];
+  for(const candidate of candidates){
+    const match=/^ws:\/\/(?:127\.0\.0\.1|\[::1\]|localhost):(\d{1,5})\/devtools\/browser\/[a-zA-Z0-9-]+$/.exec(candidate);
+    if(match && +match[1]>0 && +match[1]<=65535)return candidate;
+  }
 }
 async function executable() {
   const configured = process.env.CFL_CHROMIUM_PATH;
@@ -73,12 +82,16 @@ export async function chromium() {
     child = spawn(command, args, { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true });
     child.on('error', error => { spawnError = error; });
     child.stderr.on('data', data => { stderr = (stderr + data.toString()).slice(-16384); });
-    const info = await until(async () => {
+    const endpoint = await until(async () => {
       if (spawnError) throw spawnError;
       if (child.exitCode !== null) throw Error('Chromium exited before CDP was ready: ' + stderr);
-      try { const lines = (await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).trim().split('\n'); return lines.length >= 2 ? lines : null; } catch { return null; }
-    }, 'Chromium did not expose its temporary CDP endpoint. ' + stderr);
-    const socket = new WebSocket('ws://127.0.0.1:' + info[0] + info[1]);
+      let portFile='';
+      try { portFile=await readFile(join(profile,'DevToolsActivePort'),'utf8'); } catch(error) {
+        if(!['ENOENT','EBUSY','EACCES'].includes(error.code))throw error;
+      }
+      return debugEndpoint(portFile,stderr);
+    }, () => 'Chromium did not expose its temporary CDP endpoint. ' + stderr.slice(-2000));
+    const socket = new WebSocket(endpoint);
     await new Promise((resolve, reject) => { socket.addEventListener('open', resolve, { once: true }); socket.addEventListener('error', reject, { once: true }); });
     cdp = new CDP(socket); const version = await cdp.send('Browser.getVersion');
     return {
@@ -88,12 +101,13 @@ export async function chromium() {
         const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank', browserContextId });
         const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
         const send = (method, params) => cdp.send(method, params, sessionId);
-        const log = [], responses = [], blocked = [], failures = [];
+        const log = [], responses = [], blocked = [], failures = [], exceptions = [];
         const listener = message => {
           if (message.sessionId !== sessionId) return;
           if (message.method === 'Log.entryAdded') log.push(message.params.entry);
           if (message.method === 'Network.responseReceived') responses.push(message.params.response);
           if (message.method === 'Network.loadingFailed') failures.push(message.params);
+          if (message.method === 'Runtime.exceptionThrown') exceptions.push(message.params.exceptionDetails);
           if (message.method === 'Fetch.requestPaused') {
             const { requestId, request } = message.params;
             const allowed = allowedOrigins.includes(new URL(request.url).origin);
@@ -112,7 +126,7 @@ export async function chromium() {
           return result.result.value;
         };
         return {
-          send, evaluate, log, responses, failures, blocked,
+          send, evaluate, log, responses, failures, blocked, exceptions,
           async navigate(url) {
             if (!allowedOrigins.includes(new URL(url).origin)) throw Error('Test attempted an unapproved origin');
             const result = await send('Page.navigate', { url });

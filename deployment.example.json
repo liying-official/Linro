@@ -11,6 +11,9 @@
   "owner_email": "owner@example.com",
   "analytics_enabled": false,
   "analytics_dataset": "linro_clicks",
+  "analytics_rollup_enabled": true,
+  "analytics_rollup_interval_minutes": 15,
+  "analytics_rollup_recheck_hours": 6,
   "auth_rate_namespace": "21001",
   "write_rate_namespace": "21002",
   "redirect_rate_namespace": "21003",
@@ -29,6 +32,6 @@
   "redirect_cache_namespace_id": "",
   "redirect_cache_ttl": 300,
   "cloudflare_device_type_enabled": false,
-  "browser_timezone_enabled": true,
+  "browser_timezone_enabled": false,
   "source_url": ""
 }

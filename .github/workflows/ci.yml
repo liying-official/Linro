@@ -17,9 +17,14 @@ jobs:
       - name: Print pinned Wrangler, Miniflare, workerd and esbuild versions
         run: npm run toolchain:versions
       - run: npm run check
+      - run: npm run format:check
+      - name: Verify that the offline handbook matches the Markdown documents
+        run: npm run build:docs -- --check
       - run: npm test
       - name: Native workerd security smoke tests (no cloud credentials)
         run: npm run test:runtime
+      - name: Verify incoming HTTP disconnects on Linux workerd
+        run: npm run test:disconnect
       - run: npm run build
       - name: Rebuild the static demo and verify committed Pages assets
         run: |

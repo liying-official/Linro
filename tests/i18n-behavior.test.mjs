@@ -47,10 +47,10 @@ test('language helpers tolerate execution without a browser environment', () => 
 });
 
 test('both UI dictionaries have the same complete nested keys and value types', () => {
-  const source = ts.createSourceFile('App.tsx', readFileSync(new URL('../apps/admin/src/web/App.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const source = ts.createSourceFile('i18n-dict.ts', readFileSync(new URL('../apps/admin/src/web/i18n-dict.ts', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const statement = source.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(d => d.name.getText(source) === 'UI'));
   assert.ok(statement);
-  const script = ts.transpileModule(statement.getText(source) + '\nexports.UI = UI;', { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+  const script = ts.transpileModule(statement.getText(source).replace(/^export\s+/, '') + '\nexports.UI = UI;', { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   const context = { exports: {}, VERSION }; vm.runInNewContext(script, context); const ui = context.exports.UI;
   function compare(a, b, path) {
     assert.equal(typeof a, typeof b, path);

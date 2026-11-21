@@ -5,6 +5,7 @@ import {call,createLink} from './harness.mjs';
 import {parseCSV,exportCSV} from '../.build/apps/admin/src/web/csv.js';
 import {BROWSER_JS} from '../.build/apps/redirect/src/browser-page.js';
 import { scriptHarness } from './browser-script-harness.mjs';
+import { readWebSource } from './web-source.mjs';
 const ts=createRequire(import.meta.url)('typescript');
 for(const value of ['true','false','1',2,-1,[],{},null])test(`API rejects ambiguous block_vpn=${JSON.stringify(value)}`,async t=>{
  const f=await fixture(t);const r=await call(f.env,'/links/'+f.link.id,'PATCH',{version:current(f).version,block_vpn:value});assert.equal(r.status,400);assert.equal(current(f).block_vpn,0);
@@ -36,7 +37,7 @@ test('cross-user application token still cannot change another owner VPN policy'
 test('fresh final D1 check rejects a policy change occurring after proof validation',async t=>{
  const f=await fixture(t,{max_redirects:null});const c=await challenge(f);const p=await submit(f,c.token);
  const original=f.env.DB.prepare.bind(f.env.DB);let fired=false;
- f.env.DB.prepare=(sql)=>{if(sql.includes('SELECT id FROM links WHERE id=? AND version=? AND rule_revision=?')){fired=true;f.env.DB.sqlite.prepare('UPDATE links SET block_vpn=1 WHERE id=?').run(f.link.id);}return original(sql);};
+ f.env.DB.prepare=(sql)=>{if(sql.replace(/\s+/g, ' ').includes('SELECT id FROM links WHERE id=? AND version=? AND rule_revision=?')){fired=true;f.env.DB.sqlite.prepare('UPDATE links SET block_vpn=1 WHERE id=?').run(f.link.id);}return original(sql);};
  const r=await send(f,p.headers.get('location'),{headers:{cookie:p.headers.get('set-cookie').split(';')[0]}});assert.equal(r.status,503);assert.equal(fired,true);assert.equal(r.headers.get('location'),null);assert.equal(f.events.length,0);assert.equal(count(f),0);
 });
 for(const outcome of ['timezone','Intl unavailable'])test(`public JavaScript reports only browser Intl result: ${outcome}`,async()=>{
@@ -55,6 +56,6 @@ test('GUI warnings, bilingual labels, submission and stats use distinct browser/
  const js=ts.transpileModule(stmt.getText(source),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;const exports={};new Function('exports',js)(exports);
  const {vpnLabels}=exports;assert.deepEqual(Object.keys(vpnLabels['zh-CN']).sort(),Object.keys(vpnLabels.en).sort());
  assert.match(vpnLabels['zh-CN'].hint,/无法保证拦截全部 VPN 用户，并且会存在错误拦截/);assert.match(vpnLabels.en.hint,/cannot block all VPNs.*incorrectly block/);
- const app=readFileSync(new URL('../apps/admin/src/web/App.tsx',import.meta.url),'utf8');assert.match(app,/block_vpn: values.get\('block_vpn'\) === 'on'/);assert.match(app,/<VPNStats locale=\{s.locale\} data=\{s.analytics\}/);assert.match(app,/ip_timezones/);
+ const app=readWebSource();assert.match(app,/block_vpn: values.get\('block_vpn'\) === 'on'/);assert.match(app,/<VPNStats locale=\{s.locale\} data=\{s.analytics\}/);assert.match(app,/ip_timezones/);
  const options=readFileSync(new URL('../apps/admin/src/web/LinkOptions.tsx',import.meta.url),'utf8');assert.match(options,/defaultChecked=\{!!link\?\.block_vpn\}/);assert.match(options,/vpnLabels\[locale\].hint/);
 });

@@ -35,7 +35,7 @@ test('duplicates conflict, same slug on another host is allowed, and random code
 });
 test('hostnames, protocols, credentials, reserved slugs and mass assignment are rejected', async t => {
   const { env, domain } = await setup(); t.after(() => env.DB.close());
-  for (const target of ['javascript:alert(1)', 'data:text/plain,test', '//example.org', 'https://a:b@example.org/', 'https://example.org/%0d%0aX-Test:yes', 'https:\\evil.example', ' https://example.org/']) {
+  for (const target of ['javascript:alert(1)', 'data:text/plain,test', '//example.org', 'https://EXAMPLE_USER:REDACTED@example.org/', 'https://example.org/%0d%0aX-Test:yes', 'https:\\evil.example', ' https://example.org/']) {
     assert.equal((await call(env, '/links', 'POST', { domain_id: domain.id, slug: 'bad', target_url: target })).status, 400, target);
   }
   for (const slug of ['HEALTH', 'a/b', '你好', '%41', '..', 'x'.repeat(65)]) assert.equal((await call(env, '/links', 'POST', { domain_id: domain.id, slug, target_url: 'https://example.org/' })).status, 400, slug);

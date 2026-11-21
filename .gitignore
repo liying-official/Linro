@@ -17,6 +17,10 @@ coverage/
 release/
 
 # Keep maintenance artifacts outside the repository.
+/CHANGELOG.md
+/outputs/
+/logs/
+/evidence/
 /docs/evidence/
 /docs/history/
 /docs/previews/

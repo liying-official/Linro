@@ -1,13 +1,32 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setup, createLink, call, visit, redirect } from './harness.mjs';
+import { createHash } from 'node:crypto';
+import { PUBLIC_ASSETS } from '../.build/apps/redirect/src/public-asset-paths.js';
 for (const code of [301, 302, 307, 308]) test(`returns ${code}, Location and no-store without database writes`, async t => {
   const { env, domain } = await setup(); t.after(() => env.DB.close());
   await createLink(env, domain, { redirect_code: code }); env.DB.queries = [];
   const response = await visit(env);
   assert.equal(response.status, code); assert.equal(response.headers.get('location'), 'https://example.org/docs');
   assert.match(response.headers.get('cache-control'), /no-store/);
-  assert.equal(env.DB.queries.length, 2); assert.ok(env.DB.queries.every(q => /^SELECT/.test(q))); // lookup plus target-policy revalidation
+  assert.equal(env.DB.queries.length, 1); assert.match(env.DB.queries[0], /target_managed/);
+});
+test('only content-fingerprinted public scripts/styles are immutable; old names re-fetch and unknown hashes fail', async t => {
+  const {env} = await setup(); t.after(() => env.DB.close()); env.DB.queries.length = 0;
+  for (const [name,path] of Object.entries(PUBLIC_ASSETS)) {
+    const asset = await visit(env,path); assert.equal(asset.status,200);
+    const body = await asset.text();
+    const hash = createHash('sha256').update(body).digest('hex').slice(0,16);
+    assert.ok(path.endsWith(name.replace('.', '.'+hash+'.')));
+    assert.equal(asset.headers.get('cache-control'),'public, max-age=31536000, immutable');
+    assert.equal(asset.headers.get('set-cookie'),null);
+    const legacy = await visit(env,'/__Linro_assets/'+name);
+    assert.equal(await legacy.text(),body); assert.equal(legacy.headers.get('cache-control'),'no-store');
+    assert.equal((await visit(env,path.replace(hash,'f'.repeat(16)))).status,404);
+    const head = await visit(env,path,'HEAD');
+    assert.equal(head.status,200); assert.equal(await head.text(),'');
+  }
+  assert.equal(env.DB.queries.length,0);
 });
 test('HEAD has no body and does not record analytics', async t => {
   const { env, domain } = await setup(); t.after(() => env.DB.close()); await createLink(env, domain);

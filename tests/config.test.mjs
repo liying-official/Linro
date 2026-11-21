@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { configs, validateConfig } from '../scripts/config-lib.mjs';
-const valid = { account_id: 'a'.repeat(32), database_id: '12345678-1234-4234-8234-123456789abc', admin_host: 'admin.example.com', redirect_hosts: ['go.example.com'], access_issuer: 'https://example.cloudflareaccess.com', access_aud: 'b'.repeat(64), owner_email: 'OWNER@example.com', analytics_enabled: false };
+const valid = { account_id: 'a'.repeat(32), database_id: '22222222-2222-4222-8222-222222222222', admin_host: 'admin.example.com', redirect_hosts: ['go.example.com'], access_issuer: 'https://example.cloudflareaccess.com', access_aud: 'b'.repeat(64), owner_email: 'OWNER@example.com', analytics_enabled: false };
 test('configuration keeps admin/redirect isolated, sharing D1 with no alternate production hostnames', () => {
   const { admin, redirect } = configs(valid);
   assert.equal(admin.assets.run_worker_first, true); assert.equal(admin.assets.binding, 'ASSETS');

@@ -1,36 +1,85 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-const ts = createRequire(import.meta.url)('typescript');
-const text = readFileSync(new URL('../apps/admin/src/web/App.tsx', import.meta.url), 'utf8');
-const source = ts.createSourceFile('App.tsx', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-const app = source.statements.find(n => ts.isClassDeclaration(n) && n.name?.text === 'App');
-const selected = ['can', 'canManageLink', 'message'].map(name => app.members.find(n => n.name?.getText(source) === name).getText(source)).join('\n');
-const built = ts.transpileModule(`export class Controller { constructor(state) { this.state=state; } ui() { return {common:{operationFailed:'Failed'}}; } ${selected} }`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } });
-class APIError extends Error { constructor(code) { super('provider message'); this.code=code; this.requestId='request-123'; } }
-const exports = {}; new Function('exports','APIError', built.outputText)(exports,APIError);
-const C = exports.Controller;
-const state = (scope='owned', scopes=['links:write','links:delete']) => ({ locale: 'en', session:{user:{id:'user-1'},link_write_scope:scope,scopes} });
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { webController } from './web-controller.mjs';
+const state = (scope = 'owned', scopes = ['links:write', 'links:delete']) => ({
+  locale: 'en',
+  session: { user: { id: 'user-1' }, link_write_scope: scope, scopes },
+});
 test('GUI ownership controls distinguish own/foreign/null-owned rows and action scopes', () => {
-  const c = new C(state()); assert.equal(c.canManageLink({created_by:'user-1'}), true);
-  for (const created_by of ['user-2',null]) assert.equal(c.canManageLink({created_by}), false);
-  const viewer = new C(state('workspace',['links:read'])); assert.equal(viewer.canManageLink({created_by:'user-1'}), false);
-  const admin = new C(state('workspace')); assert.equal(admin.canManageLink({created_by:null},'links:delete'), true);
-  const noDelete = new C(state('workspace',['links:write'])); assert.equal(noDelete.canManageLink({created_by:'other'},'links:delete'), false);
+  const c = webController({ state: state() }).app;
+  assert.equal(c.canManageLink({ created_by: 'user-1' }), true);
+  for (const created_by of ['user-2', null]) assert.equal(c.canManageLink({ created_by }), false);
+  const viewer = webController({ state: state('workspace', ['links:read']) }).app;
+  assert.equal(viewer.canManageLink({ created_by: 'user-1' }), false);
+  const admin = webController({ state: state('workspace') }).app;
+  assert.equal(admin.canManageLink({ created_by: null }, 'links:delete'), true);
+  const noDelete = webController({ state: state('workspace', ['links:write']) }).app;
+  assert.equal(noDelete.canManageLink({ created_by: 'other' }, 'links:delete'), false);
 });
 test('new security error messages are localized while retaining correlation IDs', () => {
-  for (const locale of ['zh-CN','en']) {
-    const c = new C({...state(),locale});
-    for (const code of ['link_owner_required','unsafe_query_mode','private_target','security_policy_invalid']) {
-      const text = c.message(new APIError(code)); assert.ok(text.endsWith('[request-123]'));
-      assert.equal(/[\u4e00-\u9fff]/.test(text), locale==='zh-CN'); assert.ok(!text.includes('provider message'));
+  for (const locale of ['zh-CN', 'en']) {
+    const { app: c, APIError } = webController({ state: { ...state(), locale } });
+    for (const code of [
+      'link_owner_required',
+      'unsafe_query_mode',
+      'private_target',
+      'security_policy_invalid',
+    ]) {
+      const text = c.message(new APIError('provider message', 400, code, 'request-123'));
+      assert.ok(text.endsWith('[request-123]'));
+      assert.equal(/[\u4e00-\u9fff]/.test(text), locale === 'zh-CN');
+      assert.ok(!text.includes('provider message'));
     }
   }
 });
-test('GUI selection, edit/delete and bulk actions use the same ownership guard', () => {
-  assert.match(text, /const writable = rows\.filter\(link => this\.canManageLink\(link\)\)/);
-  assert.match(text, /disabled=\{!this\.canManageLink\(link\)\}/);
-  assert.match(text, /this\.canManageLink\(link, action === 'delete' \? 'links:delete' : 'links:write'\)/);
-  assert.match(text, /this\.canManageLink\(link, 'links:delete'\)/);
+test('the rendered link table limits selection, edit and delete to owned rows and bulk filters the submitted IDs', async (t) => {
+  const rows = ['user-1', 'user-2', null].map((created_by, i) => ({
+    id: 'id-' + i,
+    slug: 's' + i,
+    created_by,
+    hostname: 'go.example.com',
+    short_url: 'https://go.example.com/s' + i,
+    target_url: 'https://example.org/',
+    redirect_code: 301,
+    enabled: 1,
+    domain_enabled: 1,
+    version: 1,
+    geo_rules: [],
+    max_redirects: null,
+  }));
+  const { app, calls } = webController({
+    state: { ...state(), page: 'links', links: rows },
+    request: (path, method) =>
+      method === 'POST' ? { results: [{ ok: true }] } : { items: [], next_cursor: null },
+  });
+  const table = app.renderPage().props.children;
+  const html = renderToStaticMarkup(table);
+  assert.equal((html.match(/>Edit<\/button>/g) ?? []).length, 1);
+  assert.equal((html.match(/>Delete<\/button>/g) ?? []).length, 1);
+  const inputs = [];
+  function visit(node) {
+    if (!React.isValidElement(node)) return;
+    if (node.type === 'input' && node.props.type === 'checkbox') inputs.push(node);
+    React.Children.forEach(node.props.children, visit);
+  }
+  visit(table.type(table.props));
+  assert.deepEqual(
+    inputs.slice(1).map((e) => e.props.disabled),
+    [false, true, true],
+  );
+  inputs[0].props.onChange({ target: { checked: true } });
+  assert.deepEqual(app.state.selected, ['id-0']);
+  await app.deleteLink(rows[1]);
+  assert.equal(calls.length, 0);
+  const old = globalThis.window;
+  globalThis.window = { confirm: () => true };
+  t.after(() => {
+    if (old === undefined) delete globalThis.window;
+    else globalThis.window = old;
+  });
+  app.state.selected = rows.map((r) => r.id);
+  await app.bulk('delete');
+  assert.deepEqual(calls.find(([p]) => p === '/links/bulk')[2].items, [{ id: 'id-0', version: 1 }]);
 });

@@ -1,6 +1,7 @@
 /** Narrow structural bindings used by this project; no Node APIs in either Worker. */
 export interface D1Result<T = Record<string, unknown>> {
-  results: T[]; success: boolean;
+  results: T[];
+  success: boolean;
   meta: { changes: number; last_row_id?: number; rows_read?: number; rows_written?: number };
 }
 export interface D1Statement {
@@ -16,22 +17,20 @@ export interface Database {
 export interface AnalyticsBinding {
   writeDataPoint(point: { indexes?: string[]; blobs?: string[]; doubles?: number[] }): void;
 }
-export interface Limiter { limit(options: { key: string }): Promise<{ success: boolean }> }
-export interface Context { waitUntil(promise: Promise<unknown>): void }
+export interface Limiter {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+export interface Context {
+  waitUntil(promise: Promise<unknown>): void;
+}
 export interface KVBinding {
   get(key: string, options?: { type?: 'text'; cacheTtl?: number }): Promise<string | null>;
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
   delete(key: string): Promise<void>;
 }
-export interface Env {
+export interface SharedEnv {
   DB: Database;
   SOURCE_URL?: string;
-  ASSETS?: { fetch(request: Request): Promise<Response> };
-  ANALYTICS?: AnalyticsBinding;
-  WRITE_LIMITER?: Limiter;
-  AUTH_LIMITER?: Limiter;
-  REDIRECT_LIMITER?: Limiter;
-  PASSWORD_LIMITER?: Limiter;
   REDIRECT_CACHE?: KVBinding;
   REDIRECT_CACHE_TTL?: string;
   LINK_PASSWORD_SECRET?: string;
@@ -42,34 +41,88 @@ export interface Env {
   EXPIRED_LINK_STATUS?: string;
   ENVIRONMENT: string;
   ADMIN_ORIGIN: string;
+  ANALYTICS_ENABLED?: string;
+  CLOUDFLARE_DEVICE_TYPE_ENABLED?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+}
+
+export interface AdminEnv extends SharedEnv {
+  ASSETS?: { fetch(request: Request): Promise<Response> };
+  WRITE_LIMITER?: Limiter;
+  AUTH_LIMITER?: Limiter;
   ACCESS_ISSUER: string;
   ACCESS_AUD: string;
   BOOTSTRAP_OWNER_EMAIL: string;
   LOCAL_DEV_TOKEN?: string;
-  ANALYTICS_ENABLED?: string;
-  CLOUDFLARE_DEVICE_TYPE_ENABLED?: string;
   ANALYTICS_DATASET?: string;
+  ANALYTICS_ROLLUP_ENABLED?: string;
+  ANALYTICS_ROLLUP_RECHECK_HOURS?: string;
   ANALYTICS_API_TOKEN?: string;
-  CLOUDFLARE_ACCOUNT_ID?: string;
 }
+
+export interface RedirectEnv extends SharedEnv {
+  ANALYTICS?: AnalyticsBinding;
+  REDIRECT_LIMITER?: Limiter;
+  PASSWORD_LIMITER?: Limiter;
+  RADAR_API_TOKEN?: string;
+}
+
+/** Combined bindings for the local dual-Worker harness and existing TypeScript consumers. */
+export type Env = AdminEnv & RedirectEnv;
 export interface Domain {
-  id: string; hostname: string; name: string; enabled: number;
-  default_redirect_code: number; created_at: number; updated_at: number; version: number;
+  id: string;
+  hostname: string;
+  name: string;
+  enabled: number;
+  default_redirect_code: number;
+  created_at: number;
+  updated_at: number;
+  version: number;
 }
 export interface Link {
-  id: string; domain_id: string; slug: string; target_url: string; title: string;
-  description: string; redirect_code: number; query_mode: 'discard' | 'replace' | 'merge';
-  enabled: number; expires_at: number | null; cache_ttl: number;
-  created_by: string | null; created_at: number; updated_at: number; version: number;
-  response_mode: 'redirect' | 'text'; text_content: string; block_vpn: number;
-  geo_rules: string; password_hash: string | null;
-  max_redirects: number | null; redirect_count: number; rule_revision: number;
-  hostname?: string; domain_enabled?: number;
+  id: string;
+  domain_id: string;
+  slug: string;
+  target_url: string;
+  title: string;
+  description: string;
+  redirect_code: number;
+  query_mode: 'discard' | 'replace' | 'merge';
+  enabled: number;
+  expires_at: number | null;
+  cache_ttl: number;
+  kv_cache_ttl: number | null;
+  created_by: string | null;
+  created_at: number;
+  updated_at: number;
+  version: number;
+  response_mode: 'redirect' | 'text';
+  text_content: string;
+  block_vpn: number;
+  geo_rules: string;
+  password_hash: string | null;
+  max_redirects: number | null;
+  redirect_count: number;
+  rule_revision: number;
+  hostname?: string;
+  domain_enabled?: number;
 }
 export type Role = 'owner' | 'admin' | 'editor' | 'viewer';
 export interface User {
-  id: string; email: string; display_name: string; role: Role;
-  enabled: number; access_sub: string | null; created_at: number; updated_at: number; version: number;
+  id: string;
+  email: string;
+  display_name: string;
+  role: Role;
+  enabled: number;
+  access_sub: string | null;
+  created_at: number;
+  updated_at: number;
+  version: number;
 }
-export interface Principal { user: User; kind: 'access' | 'token' | 'local'; scopes: string[]; token_id?: string }
-export const VERSION = '1.0.1';
+export interface Principal {
+  user: User;
+  kind: 'access' | 'token' | 'local';
+  scopes: string[];
+  token_id?: string;
+}
+export const VERSION = '1.0.2';

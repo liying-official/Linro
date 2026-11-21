@@ -1,38 +1,57 @@
-# Linro v1.0.1 Security Boundaries
+# Linro security: what each lock protects
 
-[简体中文](SECURITY.md) · [README](../README.en-US.md) · [Complete guide](GUIDE.en-US.md)
+[简体中文](SECURITY.md) · [README](../README.en-US.md) · [Guide](GUIDE.en-US.md)
 
-## Administration and trust
+This page describes **v1.0.2**. Think of security as several locks with different jobs: a dashboard login lock, permissions inside the dashboard, and optional locks on individual public links.
 
-Production requires HTTPS, the correct admin host, and a verified Cloudflare Access JWT, including signature, issuer, audience, and time constraints. Static admin assets also pass authentication. Interactive writes require strict same-origin checks and `X-Linro-CSRF: 1`; the narrow public password-form origin exception does not relax admin CSRF.
+## The dashboard door
 
-Automation requires both Access and an application token. Roles and scopes are checked on each request; every token can write only links created by its owning user. Read-only workspace members can see targets and plain-text content. This is not tenant isolation or confidential document storage.
+Production requires the correct HTTPS admin origin and a valid Cloudflare Access JWT. The Worker verifies the JWT's signature, issuer, audience, and time limits itself. Keep Access protection on the **whole admin hostname**, keep `workers_dev` and `preview_urls` disabled, and keep `assets.run_worker_first: true` so dashboard files also pass authentication.
 
-D1 is authoritative for current authorization. KV contains allowlisted routing fields, not password verifiers, text bodies, counters, or root secrets, and every hit still needs a D1 guard. A D1 failure cannot authorize stale-cache access.
+A human must pass Access and be an enabled Linro user. Interactive writes require the exact same origin and `X-Linro-CSRF: 1`; cross-site browser writes are rejected. The narrow origin exception used by the public password form does not change admin CSRF rules.
 
-Production deployments must pass `preflight` with all required rate-limit bindings. The current Admin entry point invokes its pre-authentication limiter only when `AUTH_LIMITER` exists; bypassing preflight and manually removing it does not automatically make every admin request return 503. This is not permission to omit the binding. Authentication and write-rate checks have their own independent behavior.
+An automated client needs both Access credentials and a Linro application token. Its effective permissions are checked against its user's current role on every request. Token writes are restricted to links created by that user, even if the user is an Owner. Two tokens owned by one user share that ownership boundary.
 
-## Public access
+## What team members can see
 
-Password verification uses an independent root secret, an HMAC pepper, random salts, and PBKDF2-SHA256. Keep `LINK_PASSWORD_SECRET` identical on both Workers; do not regenerate it during upgrades. A successful password POST returns to the same-origin short code and never forwards the password body to the target.
+Linro is a shared workspace. Every authorized reader can see team link targets, descriptions, and plain-text content. Public password protection does not hide those fields from dashboard members. Passwords and stored password verifiers are not returned by the normal GUI, API, or exports.
 
-Browser timezone is untrusted client input; IP timezone and Tor signals use platform metadata. Travel, system settings, and geolocation errors can cause false positives. `block_vpn` rejects unknown timezones too, and disabling global collection does not disable a per-link policy. The 120-second challenge/proof is not consumed in a server-side one-time store; do not claim absolute replay prevention within the same valid context.
+Editors can change their own links. Interactive Admins and Owners can maintain all links. Owners alone manage users and site settings. Disabling a user blocks later logins and token authentication, but does not automatically disable that user's existing public links. See the [role table](GUIDE.en-US.md#permissions).
 
-Finite counts measure server-authorized requests, not people; an authorized HEAD also uses a slot. A committed D1 update followed by a lost response can conservatively consume a slot without automatic refund. The server cannot recall redirects already cached by visitors.
+## Passwords and browser checks
 
-Worker rate limits count code-defined keys at platform locations, not connections or a strict global quota. The password bucket uses an IP hash and defaults to five calls per 60 seconds. Shared exits can share a bucket; use independent namespaces for separate instances. WAF protection supplements, not replaces, application authentication and validation.
+A link password is stored as a salted PBKDF2-SHA256 verifier with an HMAC pepper. The separate root secret, `LINK_PASSWORD_SECRET`, must match on both Workers. Preserve it during upgrades: replacing it affects verification of existing passwords. A successful unlock submits only to the short-link site and returns to the same-origin short code; it does not forward the password body to the destination.
 
-Targets must be validated HTTP(S) URLs. Private/local hosts and managed short-link loops are rejected by default, but validation **does not resolve DNS** and is not complete DNS-rebinding protection. `source_url` format validation likewise does not establish actual reachability.
+Browser timezone is self-reported and can be changed by the visitor. IP timezone, ASN, and the Tor marker come from Cloudflare metadata. Per-link `block_vpn` also requires Radar's `ACCESS_ISP` classification and a authenticated single-probe RTT check. Unknown or unverifiable information is denied under that policy. Travel, system settings, corporate networks, campus networks, geolocation mistakes, and network delays can all cause legitimate visitors to be rejected. This is a heuristic access policy, not proof of a person's identity or reliable proof of VPN use.
 
-## Privacy before publication
+Challenges and proofs last at most 120 seconds and are bound to the link rules, host, query, and network context. The final response clears the proof cookie. There is no server-side single-consumption table, so the valid context must not be described as absolutely replay-proof. Turning off global timezone collection does not turn off `block_vpn` on an individual link.
 
-Do not commit `deployment.json`, generated real Wrangler settings, `.env*`, `.dev.vars*`, `.local/`, databases, SQL backups, authentication responses, logs, cookies, or keys. Inspect Markdown, hidden HTML content, examples, attachments, and screenshots. `.gitignore` does not remove prior commits, and release exclusion rules are not a general secret scanner.
+## Database, cache, and counters
 
-Documentation uses `example.com`, `example.net`, `example.org`, explicit resource placeholders, and local loopback addresses. Retained upstream links and license attribution are not test-machine information. If a real credential was exposed, revoke or rotate it and assess access records before addressing affected history; removing the current file does not revoke a secret.
+D1 decides whether a request is authorized now. KV stores an allowlist of ordinary routing fields; it does not store password verifiers, text bodies, counters, or root secrets. Every cache hit still needs a D1 guard. If D1 fails, an old cache entry cannot grant access.
+
+A finite link limit counts server-authorized GET and HEAD requests, not people. A database update followed by a lost response can consume a slot without an automatic refund. Browser-cached redirects that were already issued cannot be recalled by changing a link later.
+
+Worker rate limits are best-effort counters for the code's chosen keys at Cloudflare locations. They are not strict global quotas or connection counters. Password attempts use a hashed-IP key, defaulting to five calls per 60 seconds; people sharing an exit address can share that bucket. Use distinct namespaces for separate installations.
+
+`preflight` requires the expected rate-limit bindings. Manually removing `AUTH_LIMITER` does not guarantee every admin request will fail closed: the Admin entry point invokes that limiter only when it exists. Preserve the generated configuration and independent authentication checks. WAF rules can provide another layer, but cannot replace application permissions or validation.
+
+## Destination rules
+
+Targets must be validated HTTP(S) URLs. Credentials in URLs, unapproved local/private targets, the admin host, and registered short-link domains are rejected. Only reviewed query keys may be forwarded. The code does **not** resolve DNS while validating destinations, so hostname checks alone are not complete DNS-rebinding protection. A valid `source_url` is also not proof that its website is reachable or complete.
+
+## Keep private material out of a public repository
+
+Keep these in private storage: real `deployment.json` and generated account-specific Wrangler files; `.env*`, `.dev.vars*`, `.local/`, `.wrangler/`; database files and SQL backups; tokens, cookies, authentication responses, private keys, logs, and screenshots containing user data.
+
+Review source comments, tests, Markdown, examples, offline HTML, and generated demo assets as well as obvious configuration files. `.gitignore` does not erase old commits. Packaging exclusions reduce accidental inclusion but are not a general secret scanner. Public documentation uses reserved example addresses, loopback addresses for local development, and explicit resource placeholders. Necessary upstream URLs and legal attributions are retained.
+
+If a usable credential was exposed, revoke or rotate it and review access records. Removing a string from the latest source file does not invalidate that credential or remove copies from history.
 
 <a id="reporting"></a>
-## Reporting a security issue
 
-Do not post usable credentials, private hostname snapshots, or business data in public issues. Use a private reporting channel actually enabled by the repository. If none is enabled, ask the maintainer for a private channel without guessing an email address. Include the version, impact, and a minimal redacted reproduction, and test only instances you are authorized to assess.
+## Report a security problem privately
 
-These statements describe implementation boundaries. They are not a guarantee of no vulnerabilities, a completed penetration test, or a compliance certification.
+Use the private security-reporting channel actually enabled by the repository owner. If there is none, ask for a private channel without posting the exploit or guessing a maintainer email. Include the release version, impact, and a small reproduction containing fictional data. Do not include usable credentials, real user information, or private infrastructure snapshots in a public issue.
+
+These are implementation boundaries, not a penetration-test certificate or a promise that vulnerabilities cannot exist.
