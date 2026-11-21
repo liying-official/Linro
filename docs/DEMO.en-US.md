@@ -4,6 +4,8 @@
 
 The demo is a practice room. You can click the real dashboard controls without creating a Cloudflare account or changing a live service.
 
+[Open the GitHub Pages demo](https://liying-official.github.io/Linro/demo/) and enter the six-digit code shown on the page.
+
 ## Open it locally
 
 Download and extract the project. In a terminal, enter the project folder that contains `package.json`. With Python installed, run:
@@ -15,8 +17,6 @@ python -m http.server 8000 --bind 127.0.0.1 --directory docs
 Then open [the local demo](http://127.0.0.1:8000/demo/) and enter the six-digit code shown on the page. On systems where Python is called `python3`, use `python3` in the command. Stop the server with Ctrl+C when finished.
 
 The code is generated for the current page. It is an experience gate, not a production password. Opening the demo HTML directly from disk may prevent JavaScript modules from loading, which is why the small local HTTP server is used.
-
-If the repository owner has published the `docs` folder as a website, its `/demo/` page works without the local server. A relative HTML link on GitHub itself may show file contents instead of running the demo.
 
 ## Things to try
 
@@ -41,4 +41,4 @@ npm run build:demo
 
 The source is in `apps/demo/`. The generated website is in `docs/demo/`. The demo build substitutes an in-memory client for the production API client; production builds keep their normal authentication and API behavior.
 
-Commit the refreshed demo files when publishing the repository. CI rebuilds them and checks for differences. The demo's Content Security Policy blocks network connections and form navigation; its own assets load from the same site. Keep private configuration, backups, and logs outside `docs/`.
+GitHub Pages publishes the `/docs` directory from the `main` branch. Commit the refreshed demo files when publishing the repository. CI rebuilds them and checks for differences. The demo's Content Security Policy blocks network connections and form navigation; its own assets load from the same site. Keep private configuration, backups, and logs outside `docs/`.

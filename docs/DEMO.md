@@ -6,7 +6,7 @@
 
 ## 怎样打开？
 
-如果仓库已经启用 GitHub Pages，可访问其站点下的 `demo/`。GitHub 的源码页面不会直接运行 HTML；本地也不要直接双击演示 HTML，因为浏览器需要通过 HTTP 加载模块。
+[打开 GitHub Pages 在线演示](https://liying-official.github.io/Linro/demo/)
 
 下载完整源码后，在项目根目录运行一个只监听本机的静态服务器。已安装 Python 时：
 
@@ -35,4 +35,4 @@ npm run build:demo
 
 源代码在 `apps/demo/`，输出在 `docs/demo/`。演示构建把 API 客户端替换成内存模拟器；正式构建仍使用真实 API 客户端。改动共享界面或演示源码后，要重新生成并提交 `docs/demo/`，CI 会检查同步情况。
 
-GitHub Pages 可使用仓库分支的 `/docs` 目录发布；具体可选项以该仓库设置为准。`docs/` 是公开内容目录，不放凭据、日志或备份。[GitHub Pages 官方设置说明](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
+本仓库的 GitHub Pages 从 `main` 分支的 `/docs` 目录发布。`docs/` 是公开内容目录，不放凭据、日志或备份。[GitHub Pages 官方设置说明](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)

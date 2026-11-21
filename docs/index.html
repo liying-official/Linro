@@ -6,7 +6,7 @@
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light"><meta name="theme-color" content="#e7f4f8">
 <title>Linro v1.0.2 · 使用手册 / Handbook</title>
-<!-- Generated from the repository Markdown. Rebuild: npm run build:docs. Source digest: 6bb3f3fc01a5d5810e53a7ea6f05d5c024b8cb789686a075d408fb68bcee3b2a -->
+<!-- Generated from the repository Markdown. Rebuild: npm run build:docs. Source digest: b64a19dda37c32b3f62c819044433acd5cac4da220805b549179fd67dca24c18 -->
 <style>:root {
   color-scheme: light;
   --ink: #173d4a;
@@ -2393,7 +2393,7 @@ node scripts/retention.mjs --database &quot;SNAPSHOT.sqlite&quot; --audit-days 1
 <p><a href="#en-demo">English</a> · <a href="#zh-readme">README</a> · <a href="#zh-guide">部署指南</a></p>
 <p>演示像一个装着玩具数据的练习本：你可以试着创建、编辑和删除，但它不会改变任何真实 Cloudflare 资源。<strong>无需账号；输入页面当次显示的六位体验码即可进入。</strong> 刷新会生成新码。</p>
 <h2 id="zh-demo-怎样打开">怎样打开？<a class="heading-link" href="#zh-demo-怎样打开" aria-label="本节链接">#</a></h2>
-<p>如果仓库已经启用 GitHub Pages，可访问其站点下的 <code>demo/</code>。GitHub 的源码页面不会直接运行 HTML；本地也不要直接双击演示 HTML，因为浏览器需要通过 HTTP 加载模块。</p>
+<p><a href="https://liying-official.github.io/Linro/demo/">打开 GitHub Pages 在线演示</a></p>
 <p>下载完整源码后，在项目根目录运行一个只监听本机的静态服务器。已安装 Python 时：</p>
 <pre><code class="language-bash">python -m http.server 8000 --bind 127.0.0.1 --directory docs
 </code></pre>
@@ -2408,7 +2408,7 @@ node scripts/retention.mjs --database &quot;SNAPSHOT.sqlite&quot; --audit-days 1
 npm run build:demo
 </code></pre>
 <p>源代码在 <code>apps/demo/</code>，输出在 <code>docs/demo/</code>。演示构建把 API 客户端替换成内存模拟器；正式构建仍使用真实 API 客户端。改动共享界面或演示源码后，要重新生成并提交 <code>docs/demo/</code>，CI 会检查同步情况。</p>
-<p>GitHub Pages 可使用仓库分支的 <code>/docs</code> 目录发布；具体可选项以该仓库设置为准。<code>docs/</code> 是公开内容目录，不放凭据、日志或备份。<a href="https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site">GitHub Pages 官方设置说明</a></p>
+<p>本仓库的 GitHub Pages 从 <code>main</code> 分支的 <code>/docs</code> 目录发布。<code>docs/</code> 是公开内容目录，不放凭据、日志或备份。<a href="https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site">GitHub Pages 官方设置说明</a></p>
 </article>
 <article id="zh-protocol" data-page="protocol" data-language="zh" lang="zh-CN" aria-label="版本与协议">
 <p class="source-link"><a href="PROTOCOL-v1.0.2.md">查看 Markdown 原文</a></p>
@@ -5154,13 +5154,13 @@ PRAGMA quick_check;
 <h1 id="en-demo-try-the-linro-demo">Try the Linro demo<a class="heading-link" href="#en-demo-try-the-linro-demo" aria-label="Link to section">#</a></h1>
 <p><a href="#zh-demo">简体中文</a> · <a href="#en-readme">README</a> · <a href="#en-guide">Full setup guide</a></p>
 <p>The demo is a practice room. You can click the real dashboard controls without creating a Cloudflare account or changing a live service.</p>
+<p><a href="https://liying-official.github.io/Linro/demo/">Open the GitHub Pages demo</a> and enter the six-digit code shown on the page.</p>
 <h2 id="en-demo-open-it-locally">Open it locally<a class="heading-link" href="#en-demo-open-it-locally" aria-label="Link to section">#</a></h2>
 <p>Download and extract the project. In a terminal, enter the project folder that contains <code>package.json</code>. With Python installed, run:</p>
 <pre><code class="language-bash">python -m http.server 8000 --bind 127.0.0.1 --directory docs
 </code></pre>
 <p>Then open <a href="http://127.0.0.1:8000/demo/">the local demo</a> and enter the six-digit code shown on the page. On systems where Python is called <code>python3</code>, use <code>python3</code> in the command. Stop the server with Ctrl+C when finished.</p>
 <p>The code is generated for the current page. It is an experience gate, not a production password. Opening the demo HTML directly from disk may prevent JavaScript modules from loading, which is why the small local HTTP server is used.</p>
-<p>If the repository owner has published the <code>docs</code> folder as a website, its <code>/demo/</code> page works without the local server. A relative HTML link on GitHub itself may show file contents instead of running the demo.</p>
 <h2 id="en-demo-things-to-try">Things to try<a class="heading-link" href="#en-demo-things-to-try" aria-label="Link to section">#</a></h2>
 <ol>
 <li>Switch between Chinese and English.</li>
@@ -5177,7 +5177,7 @@ PRAGMA quick_check;
 npm run build:demo
 </code></pre>
 <p>The source is in <code>apps/demo/</code>. The generated website is in <code>docs/demo/</code>. The demo build substitutes an in-memory client for the production API client; production builds keep their normal authentication and API behavior.</p>
-<p>Commit the refreshed demo files when publishing the repository. CI rebuilds them and checks for differences. The demo&#39;s Content Security Policy blocks network connections and form navigation; its own assets load from the same site. Keep private configuration, backups, and logs outside <code>docs/</code>.</p>
+<p>GitHub Pages publishes the <code>/docs</code> directory from the <code>main</code> branch. Commit the refreshed demo files when publishing the repository. CI rebuilds them and checks for differences. The demo&#39;s Content Security Policy blocks network connections and form navigation; its own assets load from the same site. Keep private configuration, backups, and logs outside <code>docs/</code>.</p>
 </article>
 <article id="en-protocol" data-page="protocol" data-language="en" lang="en" aria-label="Version and protocol">
 <p class="source-link"><a href="PROTOCOL-v1.0.2.en-US.md">Read the Markdown source</a></p>
