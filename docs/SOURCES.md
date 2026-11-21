@@ -32,6 +32,7 @@
 | Worker secret | [Secrets](https://developers.cloudflare.com/workers/configuration/secrets/) |
 | 运行时兼容行为 | [Compatibility flags](https://developers.cloudflare.com/workers/configuration/compatibility-flags/) |
 | HTTP 请求和连接信息 | [Request](https://developers.cloudflare.com/workers/runtime-apis/request/) |
+| WebSocket 与服务端计时 | [WebSocket API](https://developers.cloudflare.com/workers/runtime-apis/websockets/) · [Performance and timers](https://developers.cloudflare.com/workers/runtime-apis/performance/) |
 | Access 后台保护 | [Self-hosted applications](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/self-hosted-public-app/) |
 | Access 自动化身份 | [Service tokens](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/) |
 | D1 升级 | [Migrations](https://developers.cloudflare.com/d1/reference/migrations/) |

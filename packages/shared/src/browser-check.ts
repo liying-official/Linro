@@ -143,7 +143,7 @@ async function networkBinding(request: Request, env: SharedEnv, vpn: boolean): P
 }
 async function sign(claims: Claims, env: SharedEnv): Promise<string> {
   const token = base64UrlEncode(encodeUTF8(JSON.stringify(claims)));
-  return `${token}.${base64UrlEncode(await mac(env, 'browser-token-v2', token))}`;
+  return `${token}.${base64UrlEncode(await mac(env, claims.vpn ? 'browser-vpn-token-v3' : 'browser-token-v2', token))}`;
 }
 async function readToken(
   token: string,
@@ -153,12 +153,13 @@ async function readToken(
   env: SharedEnv,
 ): Promise<Claims | null> {
   if (token.length > MAX_BROWSER_TOKEN_CHARS) return null;
+  const requiresVPN = link ? !!link.block_vpn : true;
   try {
     const parts = token.split('.');
     if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
     if (
       !constantTimeEqual(
-        await mac(env, 'browser-token-v2', parts[0]),
+        await mac(env, requiresVPN ? 'browser-vpn-token-v3' : 'browser-token-v2', parts[0]),
         base64UrlDecode(parts[1], true),
       )
     )
@@ -172,7 +173,6 @@ async function readToken(
     const now = nowSeconds();
     // Probes can validate a VPN challenge without a database round trip.
     // The form POST and the final request always supply the current D1 link.
-    const requiresVPN = link ? !!link.block_vpn : true;
     if (
       c.phase !== phase ||
       requiresVPN !== (c.vpn === true) ||

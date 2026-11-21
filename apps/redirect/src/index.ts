@@ -37,6 +37,7 @@ import {
 import { plainText, responseMode } from '../../../packages/shared/src/text-response.js';
 import { visitorDimensions } from '../../../packages/shared/src/visitor-dimensions.js';
 import { radarClassification } from '../../../packages/shared/src/radar-asn.js';
+import { latencyUpgrade } from './rtt-socket.js';
 import { LATENCY_PATH, latencyResult } from '../../../packages/shared/src/vpn-latency.js';
 import {
   BROWSER_CHECK_MARKER,
@@ -54,7 +55,6 @@ import {
   browserCheckPage,
   browserDenied,
   BROWSER_JS,
-  latencyProbe,
   prefersJSON,
   readBrowserForm,
 } from './browser-page.js';
@@ -238,7 +238,9 @@ function parseRequestRoute(request: Request): RequestRoute {
   const url = new URL(request.url);
   const browserPath = /^\/__Linro_browser\/([A-Za-z0-9_-]{1,64})$/.exec(url.pathname)?.[1];
   const isLatencyProbe = url.pathname === LATENCY_PATH;
-  if ((browserPath || isLatencyProbe) && request.method !== 'POST') {
+  if (isLatencyProbe && request.method !== 'GET')
+    return { url, rejection: reply('Method Not Allowed', 405, { Allow: 'GET' }) };
+  if (browserPath && request.method !== 'POST') {
     return { url, rejection: reply('Method Not Allowed', 405, { Allow: 'POST' }) };
   }
   const browserPost = request.method === 'POST' ? browserPath : undefined;
@@ -248,7 +250,7 @@ function parseRequestRoute(request: Request): RequestRoute {
     return { url, rejection: reply('Method Not Allowed', 405, { Allow: 'POST' }) };
   }
   const unlock = request.method === 'POST' ? unlockPath : undefined;
-  if (!['GET', 'HEAD'].includes(request.method) && !unlock && !browserPost && !isLatencyProbe) {
+  if (!['GET', 'HEAD'].includes(request.method) && !unlock && !browserPost) {
     return { url, rejection: reply('Method Not Allowed', 405, { Allow: 'GET, HEAD' }) };
   }
   return { url, browserPost, unlock };
@@ -612,7 +614,7 @@ async function handle(request: Request, env: RedirectEnv, context?: Context): Pr
   const publicResponse = publicEndpoint(route.url);
   if (publicResponse) return publicResponse;
   if (route.url.href.length > MAX_URL_CHARS) return reply('URI Too Long', 414);
-  if (route.url.pathname === LATENCY_PATH) return latencyProbe(request, env);
+  if (route.url.pathname === LATENCY_PATH) return latencyUpgrade(request, env);
 
   let keyword: string;
   try {
@@ -704,7 +706,7 @@ export default {
         response = errorResponse(error, requestId);
       }
     }
-    response = secure(addSourceLink(response, env.SOURCE_URL), requestId, request);
+    response = secure(addSourceLink(response, env.SOURCE_URL), requestId, request, LATENCY_PATH);
     return request.method === 'HEAD'
       ? new Response(null, { status: response.status, headers: response.headers })
       : response;

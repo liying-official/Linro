@@ -2,6 +2,7 @@
  * bindings are controlled inputs, NOT real Cloudflare geolocation or workerd. */
 import { testPassword } from '../fixture-credentials.mjs';
 import http from 'node:http';
+import { attachSocketBridge } from './socket-bridge.mjs';
 import { setup, createLink, call, redirect } from '../harness.mjs';
 import { BROWSER_JS } from '../../.build/apps/redirect/src/browser-page.js';
 import { PUBLIC_ASSETS } from '../../.build/apps/redirect/src/public-asset-paths.js';
@@ -40,7 +41,6 @@ export async function cspFixture({ legacyScript = false, legacyPassword = false,
         const request = new Request(shortOrigin + req.url, { method: req.method, headers,
           ...(!['GET', 'HEAD'].includes(req.method) ? { body: Buffer.concat(chunks) } : {}) });
         Object.defineProperty(request, 'cf', { value: { ...vpnCF, country: tor ? 'T1' : 'JP', continent: 'AS' } });
-        if (probeDelay && req.url.startsWith('/__Linro_rtt')) await new Promise(resolve => setTimeout(resolve, probeDelay));
         let response = await redirect.fetch(request, env);
         if (legacyPassword && new URL(request.url).pathname === PUBLIC_ASSETS['password.js']) {
           response = new Response('', { status: 200, headers: response.headers });
@@ -61,8 +61,9 @@ export async function cspFixture({ legacyScript = false, legacyPassword = false,
       } catch { res.writeHead(500).end('Test fixture error'); }
     });
     const port = await listenOnLoopback(bridge); shortOrigin = 'http://127.0.0.1:' + port;
+    const closeSockets = attachSocketBridge(bridge, shortOrigin, env, { ...vpnCF, country: tor ? 'T1' : 'JP', continent: 'AS' }, visits, probeDelay);
     return { shortOrigin, targetOrigin, link, visits, targetVisits, events, actualBrowserJS: BROWSER_JS,
       count: () => env.DB.sqlite.prepare('SELECT redirect_count FROM links WHERE id=?').get(link.id).redirect_count,
-      async close() { restoreRadar(); await close(bridge); await close(target); env.DB.close(); } };
+      async close() { closeSockets(); restoreRadar(); await close(bridge); await close(target); env.DB.close(); } };
   } catch (error) { restoreRadar(); if (bridge) await close(bridge); await close(target); if (env) env.DB.close(); throw error; }
 }

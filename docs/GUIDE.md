@@ -333,7 +333,7 @@ node scripts/smoke.mjs --short-url https://go.example.com/docs --expected-locati
 npx wrangler secret put RADAR_API_TOKEN --config apps/redirect/wrangler.jsonc
 ```
 
-该策略只接受 Radar 分类 `ACCESS_ISP` 或 `ORGANIZATION` 的 ASN。通过网络检查后，页面发一次同源 RTT 探针；浏览器耗时与边缘连接 RTT 的绝对差大于 50 ms 会被拒绝。缺失时区、分类、RTT 或有效证明也可能被拒绝。它是严格的可选启发式策略，**不保证准确识别所有 VPN**；企业、校园网络、繁忙设备或排队也可能失败。
+该策略只接受 Radar 分类 `ACCESS_ISP` 或 `ORGANIZATION` 的 ASN。Worker 在一条同源 WebSocket 上发出 5 轮随机挑战，浏览器逐条原样回传。每次收到正确回包后等待 400 ms 再发下一轮。Worker 计时并与该连接的 TCP 或 QUIC RTT 比较。五轮全部完成且至少一轮的绝对差严格小于 55 ms 才通过；恰好 55 ms 不算通过。缺失时区、分类、RTT 或有效证明也可能被拒绝。它是严格的可选启发式策略，**不保证准确识别所有 VPN**；企业、校园网络、繁忙设备或排队也可能失败。
 
 挑战和证明最长 120 秒，签发证明不会续期；它们绑定链接规则、主机、查询和网络上下文。源码没有服务端一次性消费表，不能承诺绝对防重放。无 JavaScript、Cookie 被禁用、网络变化或过期会阻止流程。HEAD 在只有全局采集时可以跳过采集；单链阻止开启且无证明时返回 403。
 
@@ -458,7 +458,7 @@ npx wrangler d1 execute DB --remote --config apps/admin/wrangler.jsonc --command
 
 ### 7.3 上线后确认，再处理旧版本
 
-检查两个 Worker 的实际版本、流量、绑定及域名，并验证已有应用令牌、密码短链和浏览器检查。v1.0.2 继续使用 v1.0.1 的 API、令牌哈希、Cookie 格式和兼容键，原授权按期限和规则继续生效。
+检查两个 Worker 的实际版本、流量、绑定及域名，并验证已有应用令牌、密码短链和浏览器检查。v1.0.2 继续使用 v1.0.1 的 API、令牌哈希、Cookie 名称和兼容键。旧 RTT 回执及 VPN 通行证明失效，重新打开短链可开始新挑战。
 
 需要精确分版本上线时，可使用 Wrangler 的版本上传与切流功能；先记录每个 Worker 返回的 UUID，并按[官方版本部署说明](https://developers.cloudflare.com/workers/configuration/versions-and-deployments/)核对绑定和配置。不要把 `--keep-vars` 当作保留所有配置的承诺。
 

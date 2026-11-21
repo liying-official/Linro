@@ -14,10 +14,16 @@ export function json(data: unknown, status = 200, extra: Record<string, string> 
     },
   });
 }
-export function secure(response: Response, requestId: string, request?: Request): Response {
+export function secure(
+  response: Response,
+  requestId: string,
+  request?: Request,
+  socketPath?: string,
+): Response {
   const headers = new Headers(response.headers);
+  const url = request && new URL(request.url);
   // Send HSTS only on HTTPS responses.
-  if (request && new URL(request.url).protocol === 'https:') {
+  if (url?.protocol === 'https:') {
     headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   } else {
     headers.delete('Strict-Transport-Security');
@@ -27,15 +33,28 @@ export function secure(response: Response, requestId: string, request?: Request)
   headers.set('X-Frame-Options', 'DENY');
   headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   headers.set('X-Request-Id', requestId);
+  const socketSource =
+    url &&
+    socketPath &&
+    response.headers.get('content-type')?.startsWith('text/html') &&
+    /^(?:[a-z0-9.-]+|\[[0-9a-f:]+\])(?::\d+)?$/i.test(url.host)
+      ? ' ' + (url.protocol === 'https:' ? 'wss://' : 'ws://') + url.host + socketPath
+      : '';
   headers.set(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+    `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'${socketSource}; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`,
   );
-  return new Response(response.body, {
+  return withHeaders(response, headers);
+}
+export function withHeaders(response: Response, headers: Headers): Response {
+  // workerd needs the accepted socket on every new 101 response wrapper.
+  const init = {
     status: response.status,
     statusText: response.statusText,
     headers,
-  });
+    webSocket: (response as Response & { webSocket?: WebSocket }).webSocket,
+  };
+  return new Response(response.body, init);
 }
 export function errorResponse(error: unknown, requestId: string): Response {
   let e: HttpError;

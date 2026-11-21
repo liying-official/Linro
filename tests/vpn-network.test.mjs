@@ -8,7 +8,10 @@ import {
   validateBrowserChallenge,
   issueBrowserCookie,
 } from '../.build/packages/shared/src/browser-check.js';
-import { radarBody, radarToken, radarURL, testASN, vpnCF } from './vpn-fixture.mjs';
+import { collectLatency, radarBody, radarToken, radarURL, testASN, vpnCF } from './vpn-fixture.mjs';
+import { measureSocket } from '../.build/apps/redirect/src/rtt-socket.js';
+import { edgeRtt, latencyResult } from '../.build/packages/shared/src/vpn-latency.js';
+import { installSocketRuntime } from './browser/socket-bridge.mjs';
 import { scriptHarness } from './browser-script-harness.mjs';
 import {
   makePurposeMac,
@@ -16,33 +19,40 @@ import {
   encodeUTF8,
 } from '../.build/packages/shared/src/encoding.js';
 
-test('the page script times one probe, sends no inter-probe data and immediately posts one duration', async () => {
-  const durations = [17.5];
-  const h = scriptHarness({
-    probeDurations: durations,
-    fetcher: async (url, options) => {
-      if (new URL(url).pathname !== '/__Linro_rtt')
-        return Response.json({
-          ok: true,
-          data: { next: '/docs?utm_source=fixture&_Linro_check=1' },
+for (const complete of [true, false])
+  test('browser echoes server frames on one socket, complete=' + complete, async () => {
+    const challenges = Array.from({ length: 5 }, (_, i) => String(i).padStart(22, 'A'));
+    const sent = [],
+      connections = [];
+    class ClientSocket {
+      constructor(url, protocols) {
+        connections.push([url, protocols]);
+        this.protocol = protocols[0];
+        queueMicrotask(() => this.onopen());
+      }
+      send(text) {
+        sent.push(text);
+        const data = challenges[sent.length - 1] ?? 'receipt.sealed_verdict';
+        queueMicrotask(() => {
+          if (!complete && sent.length === 2) this.onclose();
+          else this.onmessage({ data });
         });
-      assert.equal(new URL(url).search, '?utm_source=fixture');
-      assert.equal(options.cache, 'no-store');
-      assert.equal(options.mode, 'same-origin');
-      assert.deepEqual([...options.body.keys()], ['challenge']);
-      return new Response('single-fixture');
-    },
+      }
+      close() {}
+    }
+    const h = scriptHarness({ socketClass: ClientSocket });
+    await h.settled();
+    assert.deepEqual(
+      connections.map((c) => c[0]),
+      ['wss://go.example.com/__Linro_rtt?utm_source=fixture'],
+    );
+    assert.deepEqual(Array.from(connections[0][1]), ['linro-rtt-v3', h.challenge.value]);
+    assert.deepEqual(sent, ['ready', ...(complete ? challenges : challenges.slice(0, 1))]);
+    assert.equal(h.requests.length, complete ? 1 : 0);
+    if (complete) assert.equal(h.requests[0].options.body.get('latency'), 'sealed_verdict');
+    assert.equal(h.navigations.length, complete ? 1 : 0);
+    assert.equal(h.forms.length, 0);
   });
-  await h.settled();
-  assert.deepEqual(h.gaps, []);
-  assert.equal(h.requests.length, 2);
-  assert.deepEqual(JSON.parse(h.requests[1].options.body.get('latency')), {
-    receipt: 'single-fixture',
-    elapsed: 17.5,
-  });
-  assert.equal(h.navigations.length, 1);
-  assert.equal(h.forms.length, 0);
-});
 
 function edgeCache(t) {
   const entries = new Map();
@@ -343,71 +353,159 @@ for (const category of ['HOSTING_CLOUD_CONTENT', 'UNKNOWN_CATEGORY', null]) {
     assert.equal(r.status, 403);
     assert.equal(r.headers.get('location'), null);
     assert.equal(r.headers.get('set-cookie'), null);
-    assert.equal(f.events[0].blobs[9], category === 'HOSTING_CLOUD_CONTENT' ? 'asn_category' : 'asn_unavailable');
+    assert.equal(
+      f.events[0].blobs[9],
+      category === 'HOSTING_CLOUD_CONTENT' ? 'asn_category' : 'asn_unavailable',
+    );
     assert.equal(count(f), 0);
   });
 }
 
-const tcp = { ...vpnCF, httpProtocol: 'HTTP/2', clientTcpRtt: 20 };
-const quic = { ...vpnCF, httpProtocol: 'HTTP/3', clientQuicRtt: 100, clientTcpRtt: 0 };
-for (const [name, probeCF, elapsed, permit] of [
-  ['TCP exceeds the threshold by a fraction of a millisecond', tcp, 70.01, false],
-  ['QUIC differs by 51 ms in the other direction', quic, 49, false],
-  ['TCP difference is exactly 50 ms', tcp, 70, true],
-  ['QUIC difference is exactly 50 ms', quic, 50, true],
-  ['QUIC matches the RTT of the probe request', quic, 100, true],
-])
-  test(name, async (t) => {
-    const f = await fixture(t, { block_vpn: true });
-    const c = await challenge(f, '/docs', { probeCF, elapsed });
-    const p = await submit(f, c.token);
-    assert.equal(count(f), 0);
-    assert.equal(p.status, permit ? 303 : 403);
-    if (permit) {
-      const final = await send(f, p.headers.get('location'), {
-        headers: { cookie: p.headers.get('set-cookie').split(';')[0] },
-      });
-      assert.equal(final.status, 301);
-      assert.equal(count(f), 1);
-    } else {
-      assert.equal(p.headers.get('set-cookie'), null);
-      assert.deepEqual(f.events[0].blobs.slice(9), ['latency_mismatch', 'vpn_blocked']);
-    }
+// Drive the actual Worker state machine with deterministic I/O timestamps.
+function session(t, reference, secret, token) {
+  let time = 0;
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.mock.method(performance, 'now', () => time);
+  const wire = new EventTarget(),
+    sent = [],
+    codes = [];
+  let done;
+  const receipt = new Promise((resolve) => {
+    done = resolve;
   });
+  wire.send = (data) => {
+    if (data.startsWith('receipt.')) done(data.slice(8));
+    sent.push(data);
+  };
+  wire.close = (code) => codes.push(code);
+  const input = (data) => wire.dispatchEvent(new MessageEvent('message', { data }));
+  measureSocket(wire, reference, secret, token, Date.now() + 120_000);
+  input('ready');
+  return {
+    sent,
+    codes,
+    input,
+    receipt,
+    disconnect: () => wire.dispatchEvent(new Event('close')),
+    advance(ms) {
+      time += ms;
+      t.mock.timers.tick(ms);
+    },
+  };
+}
 
-for (const probeCF of [
-  { ...vpnCF, httpProtocol: 'HTTP/2', clientTcpRtt: undefined, clientQuicRtt: 12 },
-  { ...vpnCF, httpProtocol: 'HTTP/3', clientQuicRtt: undefined, clientTcpRtt: 12 },
-  { ...vpnCF, httpProtocol: 'HTTP/2', clientTcpRtt: -1 },
+for (const [name, ref, samples, expected] of [
+  ['only the first round qualifies', 10, [64.99, 80, 80, 80, 80], 'match'],
+  ['only the fifth qualifies', 100, [0, 40, 45, 160, 46], 'match'],
+  [
+    'exactly 55 in either direction is outside tolerance',
+    100,
+    [45, 155, 45, 155, 45],
+    'latency_mismatch',
+  ],
+  ['all differences above 55', 20, [76, 80, 100, 90, 85], 'latency_mismatch'],
+  ['missing connection metadata', null, [0, 1, 2, 3, 4], 'latency_unavailable'],
 ])
-  test('missing or invalid trusted RTT fails closed ' + JSON.stringify(probeCF), async (t) => {
-    const f = await fixture(t, { block_vpn: true });
-    const c = await challenge(f, '/docs', {
-      probeCF,
-      headers: { 'client-tcp-rtt': '12', 'client-quic-rtt': '12' },
+  test('five server-timed echoes: ' + name, async (t) => {
+    const secret = newTestSecret(),
+      token = 'fixture-challenge',
+      ws = session(t, ref, secret, token);
+    const seen = new Set();
+    samples.forEach((ms, i) => {
+      if (i) {
+        ws.advance(399);
+        assert.equal(ws.sent.length, i);
+        ws.advance(1);
+      }
+      const nonce = ws.sent[i];
+      assert.match(nonce, /^[A-Za-z0-9_-]{22}$/);
+      assert.ok(!seen.has(nonce));
+      seen.add(nonce);
+      // Advance the measurement clock by a fractional amount; timers run on integral ticks.
+      ws.advance(ms);
+      ws.input(nonce);
     });
-    const p = await submit(f, c.token);
-    assert.equal(p.status, 403);
-    assert.equal(p.headers.get('set-cookie'), null);
-    assert.deepEqual(f.events[0].blobs.slice(9), ['latency_unavailable', 'unknown_blocked']);
-    assert.equal(f.events[0].doubles[4], 0);
-    assert.equal(count(f), 0);
+    assert.equal(await latencyResult(secret, token, await ws.receipt), expected);
+    assert.equal(seen.size, 5);
+    assert.deepEqual(ws.codes, [1000]);
+  });
+for (const [kind, interrupt] of [
+  [
+    'wrong echo',
+    (ws) => {
+      ws.advance(400);
+      ws.input('wrong');
+    },
+  ],
+  ['duplicate', (ws, first) => ws.input(first)],
+  [
+    'out of order',
+    (ws, first) => {
+      ws.advance(400);
+      ws.input(first);
+    },
+  ],
+  [
+    'binary',
+    (ws) => {
+      ws.advance(400);
+      ws.input(new ArrayBuffer(16));
+    },
+  ],
+  [
+    'client timing',
+    (ws) => {
+      ws.advance(400);
+      ws.input('{"elapsed":1}');
+    },
+  ],
+  ['timeout', (ws) => ws.advance(30_001)],
+  ['disconnect', (ws) => ws.disconnect()],
+])
+  test('no RTT receipt on ' + kind, async (t) => {
+    const ws = session(t, 12, newTestSecret(), 'test-challenge');
+    const first = ws.sent[0];
+    ws.input(first);
+    interrupt(ws, first);
+    const n = ws.sent.length;
+    ws.advance(60_000);
+    assert.equal(ws.sent.length, n);
+    assert.ok(!ws.sent.some((s) => s.startsWith('receipt.')));
+    assert.equal(ws.codes.length, 1);
   });
 
-test('protected proof requires one scalar duration and the receipt issued for this challenge', async (t) => {
-  const f = await fixture(t, { block_vpn: true });
-  const c = await challenge(f);
-  const other = await challenge(f, '/docs', { probe: false });
-  const { receipt } = JSON.parse(f.latency.get(c.token));
+test('connection reference uses trusted RTT for the upgrade transport', () => {
+  for (const [protocol, tcp, quic, value] of [
+    ['HTTP/2', 20, 90, 20],
+    ['HTTP/3', 20, 90, 90],
+    ['HTTP/2', undefined, 12, null],
+    ['HTTP/3', 12, undefined, null],
+    ['HTTP/2', -1, 12, null],
+    ['HTTP/3', 12, NaN, null],
+    [undefined, undefined, 25, 25],
+  ])
+    assert.equal(
+      edgeRtt(
+        request('/__Linro_rtt', {
+          cf: { httpProtocol: protocol, clientTcpRtt: tcp, clientQuicRtt: quic },
+          headers: { 'client-tcp-rtt': '10', 'client-quic-rtt': '10' },
+        }),
+      ),
+      value,
+    );
+});
+
+test('proof accepts only an authentic receipt for the same challenge', async (t) => {
+  const f = await fixture(t, { block_vpn: true }),
+    c = await challenge(f),
+    other = await challenge(f, '/docs', { probe: false });
+  const receipt = f.latency.get(c.token);
   for (const [token, evidence] of [
     [c.token, undefined],
+    [other.token, receipt],
+    [c.token, receipt.slice(1)],
     [c.token, '{'],
-    [other.token, f.latency.get(c.token)],
-    ...[[], [12], [12, 12, 12], null, '12', -1, {}, true, undefined].map((elapsed) => [
-      c.token,
-      JSON.stringify({ receipt, elapsed }),
-    ]),
-    [c.token, JSON.stringify({ receipt: 'untrusted', elapsed: 12 })],
+    [c.token, JSON.stringify({ receipt, elapsed: 0 })],
   ]) {
     const p = await submit(f, token, 'Asia/Tokyo', '/__Linro_browser/docs', { latency: evidence });
     assert.equal(p.status, 403);
@@ -416,47 +514,49 @@ test('protected proof requires one scalar duration and the receipt issued for th
   }
 });
 
-test('the lightweight route accepts only the current challenge and network, without a previous receipt or D1', async (t) => {
-  const f = await fixture(t, { block_vpn: true });
-  const c = await challenge(f, '/docs', { probe: false });
-  const probe = (extra = {}, options = {}) =>
-    send(f, '/__Linro_rtt', {
-      method: 'POST',
-      headers: {
-        origin: 'https://go.example.com',
-        'content-type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({ challenge: c.token, ...extra }).toString(),
-      ...options,
-    });
+test('WebSocket upgrade validates the signed VPN challenge, origin, query and network before accepting; no D1 read', async (t) => {
+  const f = await fixture(
+    t,
+    { block_vpn: true },
+    { env: { SOURCE_URL: 'https://source.example.org/release' } },
+  );
+  const c = await challenge(f, '/docs?ref=demo', { probe: false });
+  t.after(installSocketRuntime());
+  const headers = {
+    upgrade: 'websocket',
+    origin: 'https://go.example.com',
+    'sec-websocket-protocol': 'linro-rtt-v3, ' + c.token,
+  };
+  const path = '/__Linro_rtt?ref=demo';
   f.env.DB.queries.length = 0;
-  const stamp = Date.now();
-  t.mock.method(Date, 'now', () => stamp);
-  const first = await probe();
-  const receipt = await first.text();
-  assert.equal(first.status, 200);
-  assert.match(first.headers.get('cache-control'), /no-store/);
-  assert.equal((await probe({ receipt })).status, 403);
-  assert.equal((await probe({ receipt: '' })).status, 403);
-  assert.equal((await probe({}, { cf: { ...vpnCF, asn: testASN + 1 } })).status, 403);
-  assert.equal((await probe({}, { headers: { origin: 'https://other.example' } })).status, 403);
-  assert.equal((await send(f, '/__Linro_rtt')).status, 405);
+  assert.equal((await send(f, path)).status, 426);
+  assert.equal((await send(f, path, { method: 'POST' })).status, 405);
+  for (const opts of [
+    { headers: { ...headers, origin: 'https://other.example' } },
+    { headers: { ...headers, origin: 'null' } },
+    { headers: { ...headers, 'sec-websocket-protocol': 'linro-rtt-v3, invalid' } },
+    { headers, cf: { ...vpnCF, asn: testASN + 1 } },
+  ])
+    assert.equal((await send(f, path, opts)).status, 403);
+  assert.equal((await send(f, '/__Linro_rtt', { headers })).status, 403);
+  const good = await send(f, path, { headers });
+  assert.ok(good.headers.get('Link'));
+  assert.ok(good.headers.get('x-request-id'));
+  assert.equal(
+    await latencyResult(f.env.BROWSER_CHECK_SECRET, c.token, await collectLatency(good)),
+    'match',
+  );
   assert.equal(f.env.DB.queries.length, 0);
   assert.equal(f.events.length, 0);
-  const partial = await submit(f, c.token, 'Asia/Tokyo', '/__Linro_browser/docs', {
-    latency: JSON.stringify({ receipt, elapsed: [12, 12, 12] }),
-  });
-  assert.equal(partial.status, 403);
-  assert.equal(count(f), 0);
 });
 
 test('previous protocol challenges, authenticated three-probe receipts and signed proofs cannot authorize', async (t) => {
   const f = await fixture(t, { block_vpn: true });
   const c = await challenge(f);
   const { BROWSER_CHECK_SECRET: secret } = f.env;
-  const oldSignature = async (token) => {
+  const oldSignature = async (token, purpose = 'browser-token-v1') => {
     const data = token.split('.')[0];
-    return data + '.' + base64UrlEncode(await makePurposeMac(secret, 'browser-token-v1', data));
+    return data + '.' + base64UrlEncode(await makePurposeMac(secret, purpose, data));
   };
   const oldChallenge = await oldSignature(c.token);
   assert.equal(
@@ -483,6 +583,28 @@ test('previous protocol challenges, authenticated three-probe receipts and signe
     assert.equal(denied.status, 403);
     assert.equal(denied.headers.get('set-cookie'), null);
   }
+  // Even a genuine single-probe receipt cannot attest to the WebSocket exchange.
+  const oldKey = await crypto.subtle.importKey(
+    'raw',
+    await makePurposeMac(secret, 'browser-rtt-single-v2', ''),
+    'AES-GCM',
+    false,
+    ['encrypt'],
+  );
+  const oldIv = crypto.getRandomValues(new Uint8Array(12));
+  const oldCiphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: oldIv, additionalData: encodeUTF8(c.token) },
+    oldKey,
+    encodeUTF8('12'),
+  );
+  const oldReceipt = base64UrlEncode(new Uint8Array([...oldIv, ...new Uint8Array(oldCiphertext)]));
+  for (const evidence of [oldReceipt, JSON.stringify({ receipt: oldReceipt, elapsed: 12 })]) {
+    const blocked = await submit(f, c.token, 'Asia/Tokyo', '/__Linro_browser/docs', {
+      latency: evidence,
+    });
+    assert.equal(blocked.status, 403);
+    assert.equal(blocked.headers.get('set-cookie'), null);
+  }
   const modern = await submit(f, c.token);
   const [name, proof] = modern.headers.get('set-cookie').split(';')[0].split('=');
   const denied = await send(f, modern.headers.get('location'), {
@@ -490,6 +612,15 @@ test('previous protocol challenges, authenticated three-probe receipts and signe
   });
   assert.equal(denied.status, 403);
   assert.equal(denied.headers.get('location'), null);
+  const clientTimedProof = await oldSignature(proof, 'browser-token-v2');
+  assert.equal(
+    (
+      await send(f, modern.headers.get('location'), {
+        headers: { cookie: name + '=' + clientTimedProof },
+      })
+    ).status,
+    403,
+  );
   assert.equal(count(f), 0);
 });
 

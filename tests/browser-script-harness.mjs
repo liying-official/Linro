@@ -3,14 +3,13 @@ import { BROWSER_JS } from '../.build/apps/redirect/src/browser-page.js';
 
 /** Controller-only DOM surface. This does NOT execute CSP; the Chromium suite
  * separately tests real navigation and browser-generated request headers. */
-export function scriptHarness({ timezone = 'Europe/Paris', intlThrows = false, action = 'https://go.example.com/__Linro_browser/docs?utm_source=fixture', fetcher, probeDurations } = {}) {
+export function scriptHarness({ timezone = 'Europe/Paris', intlThrows = false, action = 'https://go.example.com/__Linro_browser/docs?utm_source=fixture', fetcher, socketClass } = {}) {
   const requests = [], navigations = [], forms = [], tasks = [], timers = new Map();
-  const gaps = [];
-  let clock = 0, sample = 0;
+
   const error = { hidden: true }; let calls = 0, timerId = 0, requestSubmits = 0;
   class HTMLInputElement { constructor(value = '') { this.value = value; } }
   const input = new HTMLInputElement(), challenge = new HTMLInputElement('signed-fixture-challenge');
-  const latency = probeDurations ? new HTMLInputElement() : null;
+  const latency = socketClass ? new HTMLInputElement() : null;
   class HTMLFormElement {
     action = action;
     attributes = new Map();
@@ -33,18 +32,14 @@ export function scriptHarness({ timezone = 'Europe/Paris', intlThrows = false, a
   const context = {
     HTMLInputElement, HTMLFormElement, document, location, URL, URLSearchParams, AbortController,
     Intl: { DateTimeFormat() { calls++; if (intlThrows) throw Error('Intl unavailable'); return { resolvedOptions: () => ({ timeZone: timezone }) }; } },
-    performance: { now: () => clock },
+    WebSocket: socketClass,
     fetch: async (url, options) => {
       requests.push({ url, options });
-      if (probeDurations && new URL(url).pathname === '/__Linro_rtt') clock += probeDurations[sample++];
       return fetcher ? fetcher(url, options) : Response.json({ ok: true, data: { next: '/docs?utm_source=fixture&_Linro_check=1' } });
     },
     setTimeout(callback, ms) {
       const id = ++timerId;
-      if (probeDurations && ms < 10000) {
-        gaps.push(ms);
-        queueMicrotask(() => { clock += ms; callback(); });
-      } else timers.set(id, { callback, ms });
+      timers.set(id, { callback, ms });
       return id;
     },
     clearTimeout(id) { timers.delete(id); },
@@ -52,7 +47,7 @@ export function scriptHarness({ timezone = 'Europe/Paris', intlThrows = false, a
   for (const name of ['navigator', 'localStorage', 'sessionStorage']) Object.defineProperty(context, name, { get() { throw Error('Unexpected client data source: ' + name); } });
   vm.runInNewContext(BROWSER_JS, context, { timeout: 1000 });
   return {
-    form, input, challenge, error, requests, navigations, forms, timers, gaps,
+    form, input, challenge, error, requests, navigations, forms, timers,
     get intlCalls() { return calls; }, get submitCalls() { return requestSubmits; },
     async settled() { while (tasks.length) await Promise.all(tasks.splice(0)); },
   };

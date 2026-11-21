@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import { withHeaders } from './http.js';
 import { escapeHTML } from './html.js';
 
 /** Operator-provided public source offer. It is never fetched/proxied by a Worker.
@@ -33,9 +34,5 @@ export function addSourceLink(response: Response, value: unknown): Response {
   if (!source) return response;
   const headers = new Headers(response.headers);
   headers.append('Link', `<${source}>; rel="describedby"; title="Linro Corresponding Source"`);
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
+  return withHeaders(response, headers);
 }

@@ -22,7 +22,7 @@ A short link works like a signpost: a visitor reads a short address, and Linro t
 
 The public Redirect Worker and private Admin Worker have different hostnames. Do not put public short-link hosts behind the admin Access application. KV caching and Analytics Engine are optional; start without them if you only need basic links.
 
-This guide covers application **v1.0.2**. Its API remains `/Linro/v1`, and v1.0.1 credentials/protocols remain compatible. [Protocol identifiers](PROTOCOL-v1.0.2.en-US.md) explains the intentional older compatibility labels.
+This guide covers application **v1.0.2**. Its API remains `/Linro/v1`, and existing application credentials remain valid. [Protocol identifiers](PROTOCOL-v1.0.2.en-US.md) explains the intentional older compatibility labels.
 
 <a id="local"></a>
 <a id="local-setup"></a>
@@ -507,7 +507,7 @@ Before enabling `block_vpn`, give Redirect a read-only Radar token with **Accoun
 npx wrangler secret put RADAR_API_TOKEN --config apps/redirect/wrangler.jsonc
 ```
 
-The Worker checks Tor and the visitor ASN before the password page; only ASNs in the Radar categories `ACCESS_ISP` and `ORGANIZATION` proceed. Classification lookups have bounded caching, concurrency sharing, and failure cooldowns. A browser challenge sends one same-origin RTT probe and compares its elapsed time with the platform TCP/QUIC RTT; a difference above 50 ms denies access. Missing/unverifiable RTT also denies it. [Radar setup](https://developers.cloudflare.com/radar/get-started/first-request/)
+The Worker checks Tor and the visitor ASN before the password page; only ASNs in the Radar categories `ACCESS_ISP` and `ORGANIZATION` proceed. Classification lookups have bounded caching, concurrency sharing, and failure cooldowns. The Worker sends five random challenges over one same-origin WebSocket. The browser echoes each one unchanged. After each valid echo the Worker waits 400 ms before starting the next round. It times each round against the TCP or QUIC RTT of that connection. All five must complete and at least one absolute difference must be strictly below 55 ms. Exactly 55 ms does not qualify. Missing/unverifiable RTT also denies it. [Radar setup](https://developers.cloudflare.com/radar/get-started/first-request/)
 
 The browser reports `Intl.DateTimeFormat().resolvedOptions().timeZone`. The server compares normalized timezone identifiers with `request.cf.timezone`, not just today's UTC offset. `request.cf.country === 'T1'` is the Tor signal. Self-reported timezone is untrusted. Travel, system settings, shared networks, device load, and geolocation mistakes can cause false positives. Unknown timezone is not proof of VPN use, but `block_vpn` rejects it.
 
@@ -561,7 +561,7 @@ npx wrangler versions deploy YOUR_ADMIN_VERSION_UUID@100 --config apps/admin/wra
 
 Answer Wrangler's prompts only after checking the target. The two switches are separate. A version-based code update does not by itself reconcile every hostname or Cron change; use the appropriate reviewed deployment workflow when intentionally changing those settings. Do not run trigger synchronization merely as a routine code-upgrade step. [Wrangler Worker commands](https://developers.cloudflare.com/workers/wrangler/commands/workers/)
 
-Afterward, check public HTTPS health on every host, Owner/D1 health, ordinary redirects, roles, and any enabled password/browser/analytics flows. v1.0.1 API paths, token hashes, cookies, KV keys, and CSV markers stay compatible in v1.0.2.
+Afterward, check public HTTPS health on every host, Owner/D1 health, ordinary redirects, roles, and any enabled password/browser/analytics flows. v1.0.1 API paths, token hashes, cookie names, KV keys and CSV markers stay compatible. Reopen the link for a new challenge after the WebSocket update invalidates earlier RTT receipts and VPN proofs.
 
 ### 7.3 Restore or roll back deliberately
 

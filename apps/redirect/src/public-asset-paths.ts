@@ -3,5 +3,5 @@
 export const PUBLIC_ASSETS = {
   'password.css': '/__Linro_assets/password.ef45998a28c756cb.css',
   'password.js': '/__Linro_assets/password.73913afb9f8bb5d3.js',
-  'browser.js': '/__Linro_assets/browser.7d0f159cb3118ab5.js',
+  'browser.js': '/__Linro_assets/browser.98fc806e82e5fd36.js',
 } as const;

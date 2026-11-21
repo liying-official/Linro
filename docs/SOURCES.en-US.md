@@ -41,6 +41,7 @@ These links explain the platform. Linro's source determines which platform featu
 - [Access service tokens](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/)
 - [Radar token setup](https://developers.cloudflare.com/radar/get-started/first-request/)
 - [Request metadata, including connection RTT](https://developers.cloudflare.com/workers/runtime-apis/request/)
+- [WebSocket API](https://developers.cloudflare.com/workers/runtime-apis/websockets/) · [Performance and timers](https://developers.cloudflare.com/workers/runtime-apis/performance/)
 - [Wrangler Worker commands](https://developers.cloudflare.com/workers/wrangler/commands/workers/)
 
 These references do not certify that a particular account, DNS record, secret, or deployment works. Use the [guide's verification steps](GUIDE.en-US.md) for the instance you operate.

@@ -1,7 +1,8 @@
 import { newTestSecret } from './fixture-credentials.mjs';
 import assert from 'node:assert/strict';
 import { setup, createLink, redirect, call } from './harness.mjs';
-import { collectLatency, mockRadar, vpnCF, radarToken } from './vpn-fixture.mjs';
+import { createLatencyReceipt } from '../.build/packages/shared/src/vpn-latency.js';
+import { mockRadar, vpnCF, radarToken } from './vpn-fixture.mjs';
 export const browserSecret = newTestSecret();
 export const defaultCF = { ...vpnCF, continent: 'AS' };
 export class MemoryKV {
@@ -38,11 +39,9 @@ export async function challenge(f, path = '/docs', options = {}) {
   const html = await response.text(); const token = html.match(/name="challenge" value="([A-Za-z0-9_.-]+)"/)?.[1];
   assert.ok(token, html);
   if (html.includes('name="latency"') && options.probe !== false) {
-    const probePath = '/__Linro_rtt' + new URL(path, 'https://go.example.com').search;
-    f.latency.set(token, await collectLatency(body => send(f, probePath, {
-      ...options, cf: options.probeCF ?? options.cf, method: 'POST',
-      headers: { ...options.headers, origin: 'https://go.example.com', 'content-type': 'application/x-www-form-urlencoded' }, body,
-    }), token, options.elapsed));
+    // Routing tests start with a server-issued verdict. Transport and timing are
+    // exercised separately by the WebSocket, native workerd and Chromium suites.
+    f.latency.set(token, await createLatencyReceipt(f.env.BROWSER_CHECK_SECRET, token, 'match'));
   }
   return { token, html, response };
 }

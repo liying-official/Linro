@@ -5,12 +5,13 @@ import { readBoundedBody } from '../../../packages/shared/src/body.js';
 import {
   createBrowserChallenge,
   cleanBrowserURL,
-  validateBrowserChallenge,
 } from '../../../packages/shared/src/browser-check.js';
 import {
   LATENCY_PATH,
   MAX_RECEIPT_CHARS,
-  createLatencyReceipt,
+  RTT_PROTOCOL,
+  RTT_ROUNDS,
+  RTT_TIMEOUT_MS,
 } from '../../../packages/shared/src/vpn-latency.js';
 import { isSameOriginUnlock } from './unlock-origin.js';
 import { fail } from '../../../packages/shared/src/http.js';
@@ -75,6 +76,42 @@ export const BROWSER_JS =
     try { form.requestSubmit(); } catch { failed(); }
     finally { legacyNavigation = false; }
   };
+  function collectReceipt(action, challenge, signal) {
+    const url = new URL('${LATENCY_PATH}', action.origin);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.search = action.search;
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(url.href, ['${RTT_PROTOCOL}', challenge]);
+      let rounds = 0;
+      function finish(receipt) {
+        signal.removeEventListener('abort', fail);
+        ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null;
+        ws.close();
+        if (receipt) resolve(receipt);
+        else reject(new Error('RTT check unavailable'));
+      }
+      const fail = () => finish();
+      ws.onerror = ws.onclose = fail;
+      signal.addEventListener('abort', fail, { once: true });
+      if (signal.aborted) return fail();
+      ws.onopen = () => {
+        if (ws.protocol !== '${RTT_PROTOCOL}') return fail();
+        ws.send('ready');
+      };
+      ws.onmessage = ({ data }) => {
+        if (typeof data !== 'string') return fail();
+        if (rounds < ${RTT_ROUNDS} && /^[A-Za-z0-9_-]{22}$/.test(data)) {
+          rounds++;
+          ws.send(data);
+          return;
+        }
+        const receipt = data.startsWith('receipt.') ? data.slice(8) : '';
+        if (rounds !== ${RTT_ROUNDS} || !/^[A-Za-z0-9_-]+$/.test(receipt) ||
+            receipt.length > ${MAX_RECEIPT_CHARS}) return fail();
+        finish(receipt);
+      };
+    });
+  }
   form.addEventListener('submit', async event => {
     if (legacyNavigation) return;
     event.preventDefault();
@@ -85,24 +122,12 @@ export const BROWSER_JS =
     if (error) error.hidden = true;
     try { field.value = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { field.value = ''; }
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10000);
+    const timer = setTimeout(() => controller.abort(), latency ? ${RTT_TIMEOUT_MS + 10000} : 10000);
     try {
       const body = new URLSearchParams({ challenge: challenge.value, timezone: field.value });
       if (latency instanceof HTMLInputElement) {
         latency.value = '';
-        const probe = new URL('${LATENCY_PATH}', action.origin);
-        probe.search = action.search;
-        const options = {
-          method: 'POST', credentials: 'same-origin', mode: 'same-origin', redirect: 'manual',
-          cache: 'no-store', signal: controller.signal, body: new URLSearchParams({ challenge: challenge.value }),
-        };
-        const start = performance.now();
-        const sample = await fetch(probe.href, options);
-        const elapsed = performance.now() - start;
-        if (sample.status !== 200 || sample.redirected) { failed(); return; }
-        const receipt = await sample.text();
-        if (!/^[A-Za-z0-9_-]+$/.test(receipt) || receipt.length > ${MAX_RECEIPT_CHARS}) { failed(); return; }
-        latency.value = JSON.stringify({ receipt, elapsed });
+        latency.value = await collectReceipt(action, challenge.value, controller.signal);
         body.set('latency', latency.value);
       }
       const response = await fetch(action.href, {
@@ -234,29 +259,6 @@ async function browserFields(request: Request): Promise<URLSearchParams> {
     return fail(400, 'invalid_browser_form', 'Invalid browser form.');
   }
   return new URLSearchParams(text);
-}
-
-export async function latencyProbe(request: Request, env: RedirectEnv): Promise<Response> {
-  if (
-    !isSameOriginUnlock(request) ||
-    (env.ENVIRONMENT !== 'development' && new URL(request.url).protocol !== 'https:')
-  )
-    return browserDenied(request, 'invalid');
-  const form = await browserFields(request);
-  const challenge = form.get('challenge');
-  if (
-    [...form].length !== 1 ||
-    !challenge ||
-    !(await validateBrowserChallenge(challenge, request, undefined, env))
-  )
-    return browserDenied(request, 'invalid');
-  return new Response(await createLatencyReceipt(request, env.BROWSER_CHECK_SECRET!, challenge), {
-    headers: {
-      'Content-Type': 'text/plain; charset=utf-8',
-      'Cache-Control': 'no-store',
-      'CDN-Cache-Control': 'no-store',
-    },
-  });
 }
 
 export async function readBrowserForm(

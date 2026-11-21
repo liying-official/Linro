@@ -5,7 +5,7 @@ export const vpnLabels = {
   'zh-CN': {
     block: '禁止疑似 VPN 用户访问',
     badge: 'VPN 拦截',
-    hint: '仅允许 Cloudflare Radar 分类为 ACCESS_ISP 或 ORGANIZATION 的 ASN。Tor、时区不匹配，或一次浏览器探针的请求耗时与该连接的边缘 RTT 相差超过 50 ms 时拒绝访问。需要 JavaScript、Cookie 及 Redirect Worker 的 RADAR_API_TOKEN，无法完成检查时也会拒绝。无法保证拦截全部 VPN 用户，并且会存在错误拦截。',
+    hint: '仅允许 Cloudflare Radar 分类为 ACCESS_ISP 或 ORGANIZATION 的 ASN。Tor 或时区不匹配时拒绝访问。Worker 在一条 WebSocket 上计时 5 轮，轮间隔 400 ms；五轮完成后至少一轮与连接 RTT 的绝对差须小于 55 ms。需要 JavaScript、Cookie 及 Redirect Worker 的 RADAR_API_TOKEN，无法完成检查时也会拒绝。无法保证拦截全部 VPN 用户，并且会存在错误拦截。',
     setup:
       '启用前请在两个 Worker 设置同一个独立的 BROWSER_CHECK_SECRET；不要替换已有 LINK_PASSWORD_SECRET。',
     total: '疑似 VPN 访问次数',
@@ -18,7 +18,7 @@ export const vpnLabels = {
   en: {
     block: 'Block suspected VPN visitors',
     badge: 'VPN blocking',
-    hint: 'Allow only ASNs classified as ACCESS_ISP or ORGANIZATION by Cloudflare Radar. Deny Tor, timezone mismatches, and visits where a single browser probe differs from its connection’s edge RTT by more than 50 ms. Checks require JavaScript, cookies and RADAR_API_TOKEN on the Redirect Worker. Incomplete checks deny access. This cannot block all VPNs and may incorrectly block legitimate visitors.',
+    hint: 'Allow only ASNs classified as ACCESS_ISP or ORGANIZATION by Cloudflare Radar. Deny Tor and timezone mismatches. The Worker times five rounds on one WebSocket, with 400 ms between rounds. All five must complete and at least one must differ from the connection RTT by less than 55 ms. Checks require JavaScript, cookies and RADAR_API_TOKEN on the Redirect Worker. Incomplete checks deny access. This cannot block all VPNs and may incorrectly block legitimate visitors.',
     setup:
       'First configure the same independent BROWSER_CHECK_SECRET on both Workers. Do not replace the existing LINK_PASSWORD_SECRET.',
     total: 'Suspected VPN visits',

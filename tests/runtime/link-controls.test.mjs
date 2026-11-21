@@ -227,18 +227,18 @@ test('workerd receives cf timezone metadata and uses an explicitly enabled Cloud
 
 // Real Worker crypto/Intl/Request and native D1/KV; only test Cloudflare metadata
 // and the original per-location rate bindings are injected by the fixture.
-async function browserBody(mf, challenge, timezone, cf, headers, protectedLink) {
+async function browserBody(mf, challenge, timezone, cf, headers, protectedLink, echoDelays) {
   const fields = new URLSearchParams({ challenge, timezone });
-  if (protectedLink) fields.set('latency', await collectLatency(body => mf.dispatchFetch('https://go.example.com/__Linro_rtt', {
-    method:'POST',redirect:'manual',cf,headers:{...headers,origin:'https://go.example.com','content-type':'application/x-www-form-urlencoded'},body,
-  }), challenge));
+  if (protectedLink) fields.set('latency', await collectLatency(await mf.dispatchFetch('https://go.example.com/__Linro_rtt', {
+    method:'GET', redirect:'manual', cf, headers:{...headers, origin:'https://go.example.com', upgrade:'websocket', 'sec-websocket-protocol':'linro-rtt-v3, '+challenge},
+  }), echoDelays));
   return fields.toString();
 }
-async function nativeBrowser(mf, zone='Asia/Tokyo', cf=vpnCF) {
+async function nativeBrowser(mf, zone='Asia/Tokyo', cf=vpnCF, echoDelays) {
   const headers={'cf-connecting-ip':'203.0.113.31'};
   const first=await mf.dispatchFetch('https://go.example.com/docs',{redirect:'manual',cf,headers});assert.equal(first.status,200);
   const html=await first.text();assert.doesNotMatch(html,/example\.org\/docs/);const challenge=html.match(/name="challenge" value="([A-Za-z0-9_.-]+)"/)[1];
-  const post=await mf.dispatchFetch('https://go.example.com/__Linro_browser/docs',{redirect:'manual',method:'POST',cf,headers:{...headers,origin:'null','sec-fetch-site':'same-origin','content-type':'application/x-www-form-urlencoded'},body:await browserBody(mf,challenge,zone,cf,headers,html.includes('name="latency"'))});
+  const post=await mf.dispatchFetch('https://go.example.com/__Linro_browser/docs',{redirect:'manual',method:'POST',cf,headers:{...headers,origin:'null','sec-fetch-site':'same-origin','content-type':'application/x-www-form-urlencoded'},body:await browserBody(mf,challenge,zone,cf,headers,html.includes('name="latency"'),echoDelays)});
   return {post,cf,headers};
 }
 test('workerd protected navigation uses four D1 statements, including its final authorization, with or without RTT', {timeout:60000},async t=>{
@@ -283,15 +283,25 @@ test('workerd Cloudflare T1 is denied directly and HEAD cannot disclose target',
  const {mf,db}=await fixture(t,true,false);await seed(db);await db.prepare('UPDATE links SET block_vpn=1 WHERE id=?').bind(id).run();
  for(const method of ['GET','HEAD']){const r=await mf.dispatchFetch('https://go.example.com/docs',{redirect:'manual',method,cf:{country:'T1'},headers:{'cf-connecting-ip':'203.0.113.31'}});assert.equal(r.status,403);assert.equal(r.headers.get('location'),null);if(method==='HEAD')assert.equal(await r.text(),'');}
 });
-test('workerd rejects a single QUIC latency deviation on an ACCESS_ISP link', {timeout:60000}, async t => {
+test('workerd rejects five WS rounds outside the QUIC tolerance on an ACCESS_ISP link', {timeout:60000}, async t => {
   const {mf,db} = await fixture(t,true,true);
   await seed(db,{cap:2});
   await db.prepare('UPDATE links SET block_vpn=1 WHERE id=?').bind(id).run();
-  const cf = {...vpnCF,httpProtocol:'HTTP/3',clientQuicRtt:100};
+  const cf = {...vpnCF,httpProtocol:'HTTP/3',clientQuicRtt:3000};
   const {post} = await nativeBrowser(mf,'Asia/Tokyo',cf);
   assert.equal(post.status,403);
   assert.equal(post.headers.get('location'),null);
   assert.equal(post.headers.get('set-cookie'),null);
+  assert.equal((await db.prepare('SELECT redirect_count FROM links WHERE id=?').bind(id).first()).redirect_count,0);
+});
+test('workerd measures echo delays at the server and accepts one qualifying round of five', {timeout:60000}, async t => {
+  const {mf,db}=await fixture(t,true,true); await seed(db,{cap:2});
+  await db.prepare('UPDATE links SET block_vpn=1 WHERE id=?').bind(id).run();
+  const cf={...vpnCF,httpProtocol:'HTTP/3',clientQuicRtt:5,clientTcpRtt:3000};
+  const slow=await nativeBrowser(mf,'Asia/Tokyo',cf,[150,150,150,150,150]);
+  assert.equal(slow.post.status,403);assert.equal(slow.post.headers.get('set-cookie'),null);
+  const oneMatch=await nativeBrowser(mf,'Asia/Tokyo',cf,[150,150,0,150,150]);
+  assert.equal(oneMatch.post.status,303);
   assert.equal((await db.prepare('SELECT redirect_count FROM links WHERE id=?').bind(id).first()).redirect_count,0);
 });
 test('workerd new browser policy invalidates old proof and cached rule through D1', {timeout:60000},async t=>{

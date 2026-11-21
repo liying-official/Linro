@@ -592,7 +592,7 @@ These paths use the **Redirect Worker's public hostname**, without `/Linro/v1`. 
 | GET/HEAD | `/{slug}` | Redirect, text, protection page, or denial according to current rules |
 | POST | `/__Linro_unlock/{slug}` | Password verification |
 | POST | `/__Linro_browser/{slug}` | Browser verification |
-| POST | `/__Linro_rtt` | One authenticated encrypted latency receipt for a VPN challenge |
+| GET (WebSocket upgrade) | `/__Linro_rtt` | 101 upgrade for five server-timed challenge/echo rounds on one connection |
 
 Internal POST routes reject other methods with 405 and `Allow: POST` before checking link existence. Normal public routes reject unsupported methods with `Allow: GET, HEAD`. The public rate limiter runs before health, assets, and business lookup; missing production binding/limiter failure can return 503.
 
@@ -620,11 +620,11 @@ The POST itself consumes no link quota and records no successful click. A link w
 
 A GET may show the browser page when effective global collection is active or the link has `block_vpn`. Effective global collection needs both switches and the Redirect Analytics writer. A valid root secret is needed to issue/verify challenges.
 
-The same-origin form sends `challenge` and `timezone` once each to `/__Linro_browser/{slug}`. For `block_vpn`, it also sends `latency`, a JSON string with numeric `elapsed` milliseconds and the Worker's authenticated encrypted `receipt` from one same-origin `/__Linro_rtt` probe. Form size is at most 4096 bytes, challenge 2200 code units, and timezone 64.
+The same-origin form sends `challenge` and `timezone` once each to `/__Linro_browser/{slug}`. With `block_vpn` the `latency` field contains only the opaque Worker-issued receipt (up to 128 characters). The form is limited to 4096 bytes, the challenge to 2200 characters, and the timezone to 64 characters.
 
-The RTT endpoint itself takes `application/x-www-form-urlencoded` with exactly one `challenge`, applies the same-origin check, and accepts at most 4096 body bytes. Success returns the authenticated encrypted receipt as text, not JSON. Its receipt is bound to the challenge.
+The browser upgrades a same-origin GET at `/__Linro_rtt` with the original query and offers `linro-rtt-v3` followed by the signed page challenge as WebSocket subprotocols. The Worker validates the origin and challenge and selects the first protocol. A plain GET returns 426 and the old POST returns 405. Timing begins after the browser sends `ready`, excluding the upgrade. The Worker sends five random challenges over one same-origin WebSocket. The browser echoes each one unchanged. After each valid echo the Worker waits 400 ms before starting the next round. It times each round against the TCP or QUIC RTT of that connection. All five must complete and at least one absolute difference must be strictly below 55 ms. Exactly 55 ms does not qualify. The session expires after 30 seconds or when the page challenge expires, whichever comes first. The last frame is `receipt.<receipt>` and authenticates the outcome for this challenge. Wrong echoes, timeouts and interrupted sessions cannot authorize a link. Measurement itself consumes no quota.
 
-Browser timezone comes from `Intl.DateTimeFormat().resolvedOptions().timeZone`; IP timezone comes from platform metadata. It is an untrusted client signal, not VPN or identity attestation. With VPN blocking, only ASNs classified as `ACCESS_ISP` or `ORGANIZATION` by Radar proceed; a browser/edge RTT difference above 50 ms, unknown timezones, or unverifiable data denies access. A pre-challenge denial sends no probe.
+Browser timezone comes from `Intl.DateTimeFormat().resolvedOptions().timeZone`; IP timezone comes from platform metadata. It is an untrusted client signal, not VPN or identity attestation. With VPN blocking, only ASNs classified as `ACCESS_ISP` or `ORGANIZATION` by Radar proceed; a failed RTT check, an unknown timezone or unverifiable data denies access. A pre-challenge denial opens no WebSocket.
 
 The `Accept` header changes only the **success representation**, not the form body or authorization:
 

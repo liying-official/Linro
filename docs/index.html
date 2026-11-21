@@ -6,7 +6,7 @@
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light"><meta name="theme-color" content="#e7f4f8">
 <title>Linro v1.0.2 · 使用手册 / Handbook</title>
-<!-- Generated from the repository Markdown. Rebuild: npm run build:docs. Source digest: f9f011a72235e460ce3d6a9fa4f5da9a577cb805b17dae8d5142b11eb523607b -->
+<!-- Generated from the repository Markdown. Rebuild: npm run build:docs. Source digest: 68e351384b07147b02f65086db67ba6847ccbcf033c761f606651f74f4fb5013 -->
 <style>:root {
   color-scheme: light;
   --ink: #173d4a;
@@ -1040,7 +1040,7 @@ node scripts/smoke.mjs --short-url https://go.example.com/docs --expected-locati
 <p>开启单链检查前，两端需有 <code>BROWSER_CHECK_SECRET</code>，Redirect 还需有账户 Radar 读取令牌：</p>
 <pre><code class="language-bash">npx wrangler secret put RADAR_API_TOKEN --config apps/redirect/wrangler.jsonc
 </code></pre>
-<p>该策略只接受 Radar 分类 <code>ACCESS_ISP</code> 或 <code>ORGANIZATION</code> 的 ASN。通过网络检查后，页面发一次同源 RTT 探针；浏览器耗时与边缘连接 RTT 的绝对差大于 50 ms 会被拒绝。缺失时区、分类、RTT 或有效证明也可能被拒绝。它是严格的可选启发式策略，<strong>不保证准确识别所有 VPN</strong>；企业、校园网络、繁忙设备或排队也可能失败。</p>
+<p>该策略只接受 Radar 分类 <code>ACCESS_ISP</code> 或 <code>ORGANIZATION</code> 的 ASN。Worker 在一条同源 WebSocket 上发出 5 轮随机挑战，浏览器逐条原样回传。每次收到正确回包后等待 400 ms 再发下一轮。Worker 计时并与该连接的 TCP 或 QUIC RTT 比较。五轮全部完成且至少一轮的绝对差严格小于 55 ms 才通过；恰好 55 ms 不算通过。缺失时区、分类、RTT 或有效证明也可能被拒绝。它是严格的可选启发式策略，<strong>不保证准确识别所有 VPN</strong>；企业、校园网络、繁忙设备或排队也可能失败。</p>
 <p>挑战和证明最长 120 秒，签发证明不会续期；它们绑定链接规则、主机、查询和网络上下文。源码没有服务端一次性消费表，不能承诺绝对防重放。无 JavaScript、Cookie 被禁用、网络变化或过期会阻止流程。HEAD 在只有全局采集时可以跳过采集；单链阻止开启且无证明时返回 403。</p>
 <h3 id="zh-guide-63-kv辅助缓存不是数据库替身">6.3 KV：辅助缓存，不是数据库替身<a class="heading-link" href="#zh-guide-63-kv辅助缓存不是数据库替身" aria-label="本节链接">#</a></h3>
 <p><code>redirect_cache_namespace_id</code> 留空表示不用 KV。需要时先创建 namespace：</p>
@@ -1199,7 +1199,7 @@ npx wrangler d1 execute DB --remote --config apps/admin/wrangler.jsonc --command
 </code></pre>
 <p>然后重新运行第 4 节的本地检查、原生测试、浏览器测试和 dry-run，再发布两个 Worker。不要重复生产 seed，也不要清空用户表重新生成 Owner。</p>
 <h3 id="zh-guide-73-上线后确认再处理旧版本">7.3 上线后确认，再处理旧版本<a class="heading-link" href="#zh-guide-73-上线后确认再处理旧版本" aria-label="本节链接">#</a></h3>
-<p>检查两个 Worker 的实际版本、流量、绑定及域名，并验证已有应用令牌、密码短链和浏览器检查。v1.0.2 继续使用 v1.0.1 的 API、令牌哈希、Cookie 格式和兼容键，原授权按期限和规则继续生效。</p>
+<p>检查两个 Worker 的实际版本、流量、绑定及域名，并验证已有应用令牌、密码短链和浏览器检查。v1.0.2 继续使用 v1.0.1 的 API、令牌哈希、Cookie 名称和兼容键。旧 RTT 回执及 VPN 通行证明失效，重新打开短链可开始新挑战。</p>
 <p>需要精确分版本上线时，可使用 Wrangler 的版本上传与切流功能；先记录每个 Worker 返回的 UUID，并按<a href="https://developers.cloudflare.com/workers/configuration/versions-and-deployments/">官方版本部署说明</a>核对绑定和配置。不要把 <code>--keep-vars</code> 当作保留所有配置的承诺。</p>
 <p>若部署已成功但探活失败，先查 DNS、TLS、域名绑定和版本，再单独运行 <code>npm run verify:deployment</code>。它不做自动重部署，也不关闭证书校验。确需回滚时，先确认旧代码仍兼容当前数据和密钥，再把两个 Worker 切回已记录版本；不要用旧备份直接覆盖升级后的新增业务数据。</p>
 <p><span id="zh-guide-troubleshooting"></span>
@@ -1936,8 +1936,8 @@ npx wrangler d1 execute DB --remote --config apps/admin/wrangler.jsonc --command
 <td>浏览器证明提交</td>
 </tr>
 <tr>
-<td>POST <code>/__Linro_rtt</code></td>
-<td>单链 VPN 挑战的一次 RTT 探针</td>
+<td>GET <code>/__Linro_rtt</code>（WebSocket Upgrade）</td>
+<td>一次连接，五轮服务端 RTT 挑战，成功升级返回 101</td>
 </tr>
 </tbody></table>
 </div>
@@ -1952,13 +1952,14 @@ npx wrangler d1 execute DB --remote --config apps/admin/wrangler.jsonc --command
 <p>无密码链接的解锁 POST 为 405。修改受保护规则、更换或移除密码可使旧 Cookie 失效。</p>
 <h3 id="zh-api-浏览器检查提交">浏览器检查提交<a class="heading-link" href="#zh-api-浏览器检查提交" aria-label="本节链接">#</a></h3>
 <p>全局采集需要 <code>BROWSER_TIMEZONE_ENABLED=true</code>、统计开启和实际 Analytics 写入绑定；单链 <code>block_vpn=1</code> 则独立要求检查。浏览器报告的时区不可信，与平台 IP 时区只是不同来源的信号。</p>
-<p>POST <code>/__Linro_browser/{slug}</code> 使用 <code>application/x-www-form-urlencoded</code> 表单正文，包含唯一的 <code>challenge</code> 和 <code>timezone</code>。block_vpn 还须 <code>latency</code>，其 elapsed 为本次毫秒耗时、receipt 为同挑战加密回执。正文最多 4096 字节，挑战最长 2200 字符，时区最长 64。</p>
+<p>POST <code>/__Linro_browser/{slug}</code> 使用 <code>application/x-www-form-urlencoded</code> 表单，含唯一的 <code>challenge</code> 和 <code>timezone</code>。开启 <code>block_vpn</code> 时，<code>latency</code> 只传 Worker 签发的不透明回执，最长 128 字符。表单最多 4096 字节，挑战最长 2200 字符，时区最长 64 字符。</p>
 <p>Accept 只控制成功结果，不改变正文或认证：明确接受 application/json 且 q 有效大于 0 时返回 200：</p>
 <pre><code class="language-json">{&quot;ok&quot;:true,&quot;data&quot;:{&quot;next&quot;:&quot;/welcome?_Linro_check=1&quot;}}
 </code></pre>
 <p>未明确接受 JSON、仅通配或 JSON q=0 时返回 303，Location 为同一个 next。两种成功都设置短期 <code>__Host-Linro_browser_*</code> Cookie、<code>Vary: Accept</code> 和 no-store，不扣额度或记成功点击，也不在 POST 中给出最终目标。</p>
 <p>恢复 GET 必须同时有恰好一个 <code>_Linro_check=1</code> 和有效 Cookie。证明最长 120 秒，不延长挑战窗口，绑定规则、主机、查询和网络上下文；缺一、过期或变化都不能绕过。最终会清除 Cookie，但没有服务端一次性消费表，不是绝对防重放的一次性凭据。</p>
-<p>单链 VPN 检查在密码前判断 Tor 与 Radar ASN，只允许 <code>ACCESS_ISP</code> 或 <code>ORGANIZATION</code>。通过后浏览器发一次 <code>/__Linro_rtt</code> 同源 POST，使用相同查询部分，表单只含一个有效 <code>challenge</code>，也受 4096 字节和同源校验限制。成功返回 200 <code>text/plain</code> 的加密回执，最多 128 个 base64url 字符、no-store；浏览器把它与非负有限数字 <code>elapsed</code> 一起编码成 JSON 字符串，作为后续表单的 <code>latency</code> 字段。耗时与平台 RTT 绝对差大于 50 ms 拒绝，缺有效回执也拒绝；探针不扣次数。提前被网络策略拒绝时直接为 403 结果页，不发送探针。</p>
+<p>单链 VPN 检查先于密码页检查 Tor 和 ASN，仅允许 Radar 的 <code>ACCESS_ISP</code> 与 <code>ORGANIZATION</code>。被提前拒绝时不建立测量连接。</p>
+<p>浏览器以相同查询串向 <code>/__Linro_rtt</code> 发起同源 WebSocket GET 升级，子协议列表依次为 <code>linro-rtt-v3</code>、当前签名挑战。Worker 校验来源与挑战后选定第一个子协议。普通 GET 返回 426，旧 POST 返回 405。浏览器发 <code>ready</code> 后开始计时，握手时间不计入样本。Worker 在一条同源 WebSocket 上发出 5 轮随机挑战，浏览器逐条原样回传。每次收到正确回包后等待 400 ms 再发下一轮。Worker 计时并与该连接的 TCP 或 QUIC RTT 比较。五轮全部完成且至少一轮的绝对差严格小于 55 ms 才通过；恰好 55 ms 不算通过。 会话最长 30 秒，且受原挑战到期时间限制。完成时末帧 <code>receipt.&lt;回执&gt;</code> 携带绑定原挑战的认证结果；错误回包、超时或中断无法取得放行凭据。测量不消耗短链次数。</p>
 <p>内置 JS 使用普通导航继续，避免把密码/浏览器 POST 链式提交到跨站目标。旧式 303 表单仍在，但不能保证无 JS/Cookie 的客户端完成所有流程。保护页提供中文/English 切换。</p>
 <h3 id="zh-api-公开状态码怎么读">公开状态码怎么读？<a class="heading-link" href="#zh-api-公开状态码怎么读" aria-label="本节链接">#</a></h3>
 <div class="table-scroll" tabindex="0"><table>
@@ -2297,7 +2298,7 @@ $LinroUpdated.data | Select-Object id,slug,title,version
 <p>密码使用随机盐、PBKDF2-SHA256 和独立根密钥参与的 HMAC pepper，数据库不存明文。两个 Worker 必须保留相同的 <code>LINK_PASSWORD_SECRET</code>。解锁只回到同源短链，密码不会被 POST 给目标网站；密码 Cookie 最长 900 秒，规则变更可让旧证明失效。</p>
 <p>次数上限是服务端授权次数，符合条件的 HEAD 也会使用额度，不代表独立访客数。数据库提交后若响应丢失，可能保守占用一次，不自动退款。访客电脑已经缓存的跳转也不能由服务器强制收回。</p>
 <h2 id="zh-security-浏览器检查有局限的信号">浏览器检查：有局限的信号<a class="heading-link" href="#zh-security-浏览器检查有局限的信号" aria-label="本节链接">#</a></h2>
-<p>浏览器时区由客户端自己报告，不能当作可信身份。IP 时区和 Tor 标记来自平台，但仍可能存在地理数据误差。单链 <code>block_vpn</code> 还要求 Radar 将 ASN 分类为 <code>ACCESS_ISP</code> 或 <code>ORGANIZATION</code>，并校验一次同源探针的加密 RTT 回执；时区、分类或延迟不可验证时会拒绝。</p>
+<p>浏览器时区由客户端自己报告，不能当作可信身份。IP 时区和 Tor 标记来自平台，但仍可能存在地理数据误差。单链 <code>block_vpn</code> 还要求 Radar 将 ASN 分类为 <code>ACCESS_ISP</code> 或 <code>ORGANIZATION</code>，并校验同源 WebSocket 五轮服务端测量的加密回执。客户端只回显随机挑战，无法通过填写耗时获得放行凭据；时区、分类或延迟不可验证时会拒绝。</p>
 <p>这可能拦住正常旅行用户、校园/企业网络或繁忙设备，也不能保证发现所有代理。只在明确接受这些代价的链接上启用。</p>
 <p>挑战与证明有效窗口最长 120 秒，并绑定规则、主机、查询和网络上下文。完成后 Cookie 会清除，但没有服务端一次性消费表；不能宣称绝对防重放。公开密码表单允许的缺失/null Origin 窄例外要求明确同源元数据，显式其他 Origin 仍拒绝，且不会放宽后台 CSRF。</p>
 <h2 id="zh-security-哪些访问数据会被记录">哪些访问数据会被记录？<a class="heading-link" href="#zh-security-哪些访问数据会被记录" aria-label="本节链接">#</a></h2>
@@ -2444,7 +2445,7 @@ npm run build:demo
 <td><code>/__Linro_browser/{slug}</code></td>
 </tr>
 <tr>
-<td>VPN 延迟探针 POST</td>
+<td>VPN WebSocket 升级 GET</td>
 <td><code>/__Linro_rtt</code></td>
 </tr>
 <tr>
@@ -2464,9 +2465,9 @@ npm run build:demo
 <h2 id="zh-protocol-页面资源与访客流程">页面资源与访客流程<a class="heading-link" href="#zh-protocol-页面资源与访客流程" aria-label="本节链接">#</a></h2>
 <p>页面使用带内容指纹的 <code>password.css</code>、<code>password.js</code>、<code>browser.js</code>，路径位于 <code>/__Linro_assets/</code>，指纹版本可长期缓存。没有指纹的旧路径继续返回当前资源，但使用 <code>Cache-Control: no-store</code>。</p>
 <p>密码和浏览器验证成功时，内置页面接收 200 JSON 并重新打开同源短链；普通表单可得到 303。两种方式都不会把 POST 密码提交给最终目标。完整字段、Cookie 与错误行为见 <a href="#zh-api">API</a>。</p>
-<p>单链 VPN 检查会先判断 Tor 和 ASN，仅 Radar 的 <code>ACCESS_ISP</code> 或 <code>ORGANIZATION</code> 分类可继续；通过后每次挑战尝试发送一个同源 RTT 探针。若网络在挑战前就被拒绝，浏览器直接得到 403 结果页，不发送探针。</p>
+<p>单链 VPN 检查会先判断 Tor 和 ASN，仅 Radar 的 <code>ACCESS_ISP</code> 或 <code>ORGANIZATION</code> 分类可继续；通过后，Worker 在一条同源 WebSocket 上发出 5 轮随机挑战，浏览器逐条原样回传。每次收到正确回包后等待 400 ms 再发下一轮。Worker 计时并与该连接的 TCP 或 QUIC RTT 比较。五轮全部完成且至少一轮的绝对差严格小于 55 ms 才通过；恰好 55 ms 不算通过。若网络在挑战前就被拒绝，浏览器直接得到 403 结果页，不发送探针。</p>
 <h2 id="zh-protocol-从-v101-升级要保留什么">从 v1.0.1 升级要保留什么？<a class="heading-link" href="#zh-protocol-从-v101-升级要保留什么" aria-label="本节链接">#</a></h2>
-<p>保留 Worker 名称、数据库与其他资源绑定、Access 设置和原根密钥。已有令牌哈希、Cookie 格式、KV 键和 CSV 标记保持兼容，已有密码和有效令牌按原期限与规则继续验证。某些内部兼容字符串保留旧名称是为了继续读取已有数据，不能只为“看起来统一”而替换。</p>
+<p>保留 Worker 名称、数据库与其他资源绑定、Access 设置和原根密钥。已有令牌哈希、Cookie 名称、KV 键和 CSV 标记保持兼容，已有密码和有效令牌按原期限与规则继续验证。旧的客户端计时回执和 VPN 通行 Cookie 无效，需重新打开短链。某些内部兼容字符串保留旧名称是为了继续读取已有数据，不能只为“看起来统一”而替换。</p>
 <p>源码包含 <code>0001_initial.sql</code> 至 <code>0006_destination_hosts_and_archive.sql</code>。已经全部应用六项的数据库无需新增迁移；其他实例按实际迁移账本补齐，不按文件夹版本猜测，也不清库重建。</p>
 <p>公开端保留 <code>health</code>、<code>cdn-cgi</code> 和 <code>__Linro_</code> 前缀，保留判断忽略大小写。<code>Linro</code> 仍可作为普通业务短码；<code>robots.txt</code> 等带点路径不符合短码语法。</p>
 </article>
@@ -2599,6 +2600,10 @@ npm run deploy:dry-run
 <tr>
 <td>HTTP 请求和连接信息</td>
 <td><a href="https://developers.cloudflare.com/workers/runtime-apis/request/">Request</a></td>
+</tr>
+<tr>
+<td>WebSocket 与服务端计时</td>
+<td><a href="https://developers.cloudflare.com/workers/runtime-apis/websockets/">WebSocket API</a> · <a href="https://developers.cloudflare.com/workers/runtime-apis/performance/">Performance and timers</a></td>
 </tr>
 <tr>
 <td>Access 后台保护</td>
@@ -2872,7 +2877,7 @@ npm run local:init
 </tbody></table>
 </div>
 <p>The public Redirect Worker and private Admin Worker have different hostnames. Do not put public short-link hosts behind the admin Access application. KV caching and Analytics Engine are optional; start without them if you only need basic links.</p>
-<p>This guide covers application <strong>v1.0.2</strong>. Its API remains <code>/Linro/v1</code>, and v1.0.1 credentials/protocols remain compatible. <a href="#en-protocol">Protocol identifiers</a> explains the intentional older compatibility labels.</p>
+<p>This guide covers application <strong>v1.0.2</strong>. Its API remains <code>/Linro/v1</code>, and existing application credentials remain valid. <a href="#en-protocol">Protocol identifiers</a> explains the intentional older compatibility labels.</p>
 <p><span id="en-guide-local"></span>
 
 <span id="en-guide-local-setup"></span>
@@ -3494,7 +3499,7 @@ npx wrangler secret put BROWSER_CHECK_SECRET --config apps/redirect/wrangler.jso
 <p>Before enabling <code>block_vpn</code>, give Redirect a read-only Radar token with <strong>Account → Radar → Read</strong>:</p>
 <pre><code class="language-bash">npx wrangler secret put RADAR_API_TOKEN --config apps/redirect/wrangler.jsonc
 </code></pre>
-<p>The Worker checks Tor and the visitor ASN before the password page; only ASNs in the Radar categories <code>ACCESS_ISP</code> and <code>ORGANIZATION</code> proceed. Classification lookups have bounded caching, concurrency sharing, and failure cooldowns. A browser challenge sends one same-origin RTT probe and compares its elapsed time with the platform TCP/QUIC RTT; a difference above 50 ms denies access. Missing/unverifiable RTT also denies it. <a href="https://developers.cloudflare.com/radar/get-started/first-request/">Radar setup</a></p>
+<p>The Worker checks Tor and the visitor ASN before the password page; only ASNs in the Radar categories <code>ACCESS_ISP</code> and <code>ORGANIZATION</code> proceed. Classification lookups have bounded caching, concurrency sharing, and failure cooldowns. The Worker sends five random challenges over one same-origin WebSocket. The browser echoes each one unchanged. After each valid echo the Worker waits 400 ms before starting the next round. It times each round against the TCP or QUIC RTT of that connection. All five must complete and at least one absolute difference must be strictly below 55 ms. Exactly 55 ms does not qualify. Missing/unverifiable RTT also denies it. <a href="https://developers.cloudflare.com/radar/get-started/first-request/">Radar setup</a></p>
 <p>The browser reports <code>Intl.DateTimeFormat().resolvedOptions().timeZone</code>. The server compares normalized timezone identifiers with <code>request.cf.timezone</code>, not just today&#39;s UTC offset. <code>request.cf.country === &#39;T1&#39;</code> is the Tor signal. Self-reported timezone is untrusted. Travel, system settings, shared networks, device load, and geolocation mistakes can cause false positives. Unknown timezone is not proof of VPN use, but <code>block_vpn</code> rejects it.</p>
 <p>A check page leads to a same-origin POST, a short-lived proof cookie, and a fresh GET with current D1 checks. Proof expires within the original 120-second challenge window. There is no server-side one-use consumption table; do not describe it as absolutely replay-proof. JavaScript/cookies are needed for the intended flow. HEAD skips collection-only JavaScript, but a VPN-protected HEAD without valid proof returns 403.</p>
 <p>Browser checking adds requests and latency. Use it where its policy is useful, not simply because it is available. A pre-challenge network denial returns a 403 result page and sends no RTT probe.</p>
@@ -3526,7 +3531,7 @@ npx wrangler versions upload --config apps/redirect/wrangler.jsonc --keep-vars -
 npx wrangler versions deploy YOUR_ADMIN_VERSION_UUID@100 --config apps/admin/wrangler.jsonc
 </code></pre>
 <p>Answer Wrangler&#39;s prompts only after checking the target. The two switches are separate. A version-based code update does not by itself reconcile every hostname or Cron change; use the appropriate reviewed deployment workflow when intentionally changing those settings. Do not run trigger synchronization merely as a routine code-upgrade step. <a href="https://developers.cloudflare.com/workers/wrangler/commands/workers/">Wrangler Worker commands</a></p>
-<p>Afterward, check public HTTPS health on every host, Owner/D1 health, ordinary redirects, roles, and any enabled password/browser/analytics flows. v1.0.1 API paths, token hashes, cookies, KV keys, and CSV markers stay compatible in v1.0.2.</p>
+<p>Afterward, check public HTTPS health on every host, Owner/D1 health, ordinary redirects, roles, and any enabled password/browser/analytics flows. v1.0.1 API paths, token hashes, cookie names, KV keys and CSV markers stay compatible. Reopen the link for a new challenge after the WebSocket update invalidates earlier RTT receipts and VPN proofs.</p>
 <h3 id="en-guide-73-restore-or-roll-back-deliberately">7.3 Restore or roll back deliberately<a class="heading-link" href="#en-guide-73-restore-or-roll-back-deliberately" aria-label="Link to section">#</a></h3>
 <p>Test SQL backups in a new isolated SQLite file or recovery D1 database before touching production. Validate tables, counts, foreign keys, migrations, rule triggers, and password capability with the matching root secrets. The SQL export may already contain schema and migration records; inspect it before adding a separate initialization step.</p>
 <p>A code rollback routes traffic to a prior compatible Worker version. It does not undo database changes or secret rotation. Never overwrite new business data merely to roll back code. A missing password-root secret cannot be reconstructed from stored verifiers; keep secure copies before an incident.</p>
@@ -4580,9 +4585,9 @@ npm run verify:deployment -- --url https://go.example.com/health --family 4
 <td>Browser verification</td>
 </tr>
 <tr>
-<td>POST</td>
+<td>GET (WebSocket upgrade)</td>
 <td><code>/__Linro_rtt</code></td>
-<td>One authenticated encrypted latency receipt for a VPN challenge</td>
+<td>101 upgrade for five server-timed challenge/echo rounds on one connection</td>
 </tr>
 </tbody></table>
 </div>
@@ -4599,9 +4604,9 @@ npm run verify:deployment -- --url https://go.example.com/health --family 4
 <p>The POST itself consumes no link quota and records no successful click. A link without a password rejects unlock POST with 405. Protected-rule/password changes invalidate cookies issued under the old revision.</p>
 <h3 id="en-api-44-browser-post-and-latency-probe">4.4 Browser POST and latency probe<a class="heading-link" href="#en-api-44-browser-post-and-latency-probe" aria-label="Link to section">#</a></h3>
 <p>A GET may show the browser page when effective global collection is active or the link has <code>block_vpn</code>. Effective global collection needs both switches and the Redirect Analytics writer. A valid root secret is needed to issue/verify challenges.</p>
-<p>The same-origin form sends <code>challenge</code> and <code>timezone</code> once each to <code>/__Linro_browser/{slug}</code>. For <code>block_vpn</code>, it also sends <code>latency</code>, a JSON string with numeric <code>elapsed</code> milliseconds and the Worker&#39;s authenticated encrypted <code>receipt</code> from one same-origin <code>/__Linro_rtt</code> probe. Form size is at most 4096 bytes, challenge 2200 code units, and timezone 64.</p>
-<p>The RTT endpoint itself takes <code>application/x-www-form-urlencoded</code> with exactly one <code>challenge</code>, applies the same-origin check, and accepts at most 4096 body bytes. Success returns the authenticated encrypted receipt as text, not JSON. Its receipt is bound to the challenge.</p>
-<p>Browser timezone comes from <code>Intl.DateTimeFormat().resolvedOptions().timeZone</code>; IP timezone comes from platform metadata. It is an untrusted client signal, not VPN or identity attestation. With VPN blocking, only ASNs classified as <code>ACCESS_ISP</code> or <code>ORGANIZATION</code> by Radar proceed; a browser/edge RTT difference above 50 ms, unknown timezones, or unverifiable data denies access. A pre-challenge denial sends no probe.</p>
+<p>The same-origin form sends <code>challenge</code> and <code>timezone</code> once each to <code>/__Linro_browser/{slug}</code>. With <code>block_vpn</code> the <code>latency</code> field contains only the opaque Worker-issued receipt (up to 128 characters). The form is limited to 4096 bytes, the challenge to 2200 characters, and the timezone to 64 characters.</p>
+<p>The browser upgrades a same-origin GET at <code>/__Linro_rtt</code> with the original query and offers <code>linro-rtt-v3</code> followed by the signed page challenge as WebSocket subprotocols. The Worker validates the origin and challenge and selects the first protocol. A plain GET returns 426 and the old POST returns 405. Timing begins after the browser sends <code>ready</code>, excluding the upgrade. The Worker sends five random challenges over one same-origin WebSocket. The browser echoes each one unchanged. After each valid echo the Worker waits 400 ms before starting the next round. It times each round against the TCP or QUIC RTT of that connection. All five must complete and at least one absolute difference must be strictly below 55 ms. Exactly 55 ms does not qualify. The session expires after 30 seconds or when the page challenge expires, whichever comes first. The last frame is <code>receipt.&lt;receipt&gt;</code> and authenticates the outcome for this challenge. Wrong echoes, timeouts and interrupted sessions cannot authorize a link. Measurement itself consumes no quota.</p>
+<p>Browser timezone comes from <code>Intl.DateTimeFormat().resolvedOptions().timeZone</code>; IP timezone comes from platform metadata. It is an untrusted client signal, not VPN or identity attestation. With VPN blocking, only ASNs classified as <code>ACCESS_ISP</code> or <code>ORGANIZATION</code> by Radar proceed; a failed RTT check, an unknown timezone or unverifiable data denies access. A pre-challenge denial opens no WebSocket.</p>
 <p>The <code>Accept</code> header changes only the <strong>success representation</strong>, not the form body or authorization:</p>
 <div class="table-scroll" tabindex="0"><table>
 <thead>
@@ -5073,7 +5078,7 @@ main().catch(error =&gt; { console.error(error.message); process.exitCode = 1; }
 <p>Editors can change their own links. Interactive Admins and Owners can maintain all links. Owners alone manage users and site settings. Disabling a user blocks later logins and token authentication, but does not automatically disable that user&#39;s existing public links. See the <a href="#en-guide-permissions">role table</a>.</p>
 <h2 id="en-security-passwords-and-browser-checks">Passwords and browser checks<a class="heading-link" href="#en-security-passwords-and-browser-checks" aria-label="Link to section">#</a></h2>
 <p>A link password is stored as a salted PBKDF2-SHA256 verifier with an HMAC pepper. The separate root secret, <code>LINK_PASSWORD_SECRET</code>, must match on both Workers. Preserve it during upgrades: replacing it affects verification of existing passwords. A successful unlock submits only to the short-link site and returns to the same-origin short code; it does not forward the password body to the destination.</p>
-<p>Browser timezone is self-reported and can be changed by the visitor. IP timezone, ASN, and the Tor marker come from Cloudflare metadata. Per-link <code>block_vpn</code> requires Radar to classify the ASN as <code>ACCESS_ISP</code> or <code>ORGANIZATION</code> and requires an authenticated single-probe RTT check. Unknown or unverifiable information is denied under that policy. Travel, system settings, corporate networks, campus networks, geolocation mistakes, and network delays can all cause legitimate visitors to be rejected. This is a heuristic access policy, not proof of a person&#39;s identity or reliable proof of VPN use.</p>
+<p>Browser timezone is self-reported and can be changed by the visitor. IP timezone, ASN, and the Tor marker come from Cloudflare metadata. Per-link <code>block_vpn</code> requires Radar to classify the ASN as <code>ACCESS_ISP</code> or <code>ORGANIZATION</code> and requires an authenticated receipt for five server-timed WebSocket rounds. The client echoes random challenges and cannot supply its own duration. Unknown or unverifiable information is denied under that policy. Travel, system settings, corporate networks, campus networks, geolocation mistakes, and network delays can all cause legitimate visitors to be rejected. This is a heuristic access policy, not proof of a person&#39;s identity or reliable proof of VPN use.</p>
 <p>Challenges and proofs last at most 120 seconds and are bound to the link rules, host, query, and network context. The final response clears the proof cookie. There is no server-side single-consumption table, so the valid context must not be described as absolutely replay-proof. Turning off global timezone collection does not turn off <code>block_vpn</code> on an individual link.</p>
 <h2 id="en-security-database-cache-and-counters">Database, cache, and counters<a class="heading-link" href="#en-security-database-cache-and-counters" aria-label="Link to section">#</a></h2>
 <p>D1 decides whether a request is authorized now. KV stores an allowlist of ordinary routing fields; it does not store password verifiers, text bodies, counters, or root secrets. Every cache hit still needs a D1 guard. If D1 fails, an old cache entry cannot grant access.</p>
@@ -5217,7 +5222,7 @@ npm run build:demo
 <td><code>/__Linro_browser/{slug}</code></td>
 </tr>
 <tr>
-<td>Single VPN latency probe POST</td>
+<td>VPN WebSocket upgrade GET</td>
 <td><code>/__Linro_rtt</code></td>
 </tr>
 <tr>
@@ -5245,9 +5250,9 @@ npm run build:demo
 <p>The public pages use fingerprinted <code>password.css</code>, <code>password.js</code>, and <code>browser.js</code> asset URLs. A matching fingerprint can be cached for a year. Unversioned forms of those paths return the current content with <code>Cache-Control: no-store</code>.</p>
 <h2 id="en-protocol-follow-the-visitor-flow">Follow the visitor flow<a class="heading-link" href="#en-protocol-follow-the-visitor-flow" aria-label="Link to section">#</a></h2>
 <p>Password unlock and browser verification return 200 JSON to the built-in same-origin page script, or 303 to a regular form. Both return to the same short-link site. The resumed GET performs current checks before returning a destination or text. Their successful intermediate responses are not successful-click events and do not consume the link&#39;s finite request quota.</p>
-<p>For a VPN-protected link, Tor and Radar ASN checks run before the password page. Only ASNs classified as <code>ACCESS_ISP</code> or <code>ORGANIZATION</code> proceed. An eligible challenge sends one same-origin RTT probe. A network denial before the challenge produces a 403 result page without a probe. Both protection pages support Chinese and English.</p>
+<p>For a VPN-protected link, Tor and Radar ASN checks run before the password page. Only ASNs classified as <code>ACCESS_ISP</code> or <code>ORGANIZATION</code> proceed. The Worker sends five random challenges over one same-origin WebSocket. The browser echoes each one unchanged. After each valid echo the Worker waits 400 ms before starting the next round. It times each round against the TCP or QUIC RTT of that connection. All five must complete and at least one absolute difference must be strictly below 55 ms. Exactly 55 ms does not qualify. A network denial before the challenge produces a 403 result page without a probe. Both protection pages support Chinese and English.</p>
 <h2 id="en-protocol-upgrade-without-renaming-working-resources">Upgrade without renaming working resources<a class="heading-link" href="#en-protocol-upgrade-without-renaming-working-resources" aria-label="Link to section">#</a></h2>
-<p>v1.0.2 preserves v1.0.1 API paths, token hashes, visitor-cookie formats, KV keys, CSV markers, and database structure. Existing credentials remain subject to their normal expiry, revocation, and rule checks. Keep Worker names, bindings, and root-secret values unchanged unless you are deliberately migrating them.</p>
+<p>v1.0.2 preserves v1.0.1 API paths, token hashes, visitor-cookie names, KV keys, CSV markers, and database structure. Existing passwords and application tokens remain subject to normal expiry and revocation. Old client-timed receipts and VPN proof cookies are invalid; reopen the short link to start a new challenge. Keep Worker names, bindings, and root-secret values unchanged unless you are deliberately migrating them.</p>
 <p>All six database migrations, <code>0001</code> through <code>0006</code>, are included. Check the target database and apply only its pending migrations. A database already containing all six needs no extra migration solely for this patch release.</p>
 <p>Older internal compatibility labels such as <code>cf-links</code> can remain in stored identity, cryptographic-purpose, or export-format handling. They are not instructions to rename your database or rotate secrets. The user-facing product and active API are Linro.</p>
 <p>On public short-link hosts, only <code>health</code>, <code>cdn-cgi</code>, and the <code>__Linro_</code> prefix are reserved, ignoring case. The business slug <code>Linro</code> is allowed. Normal business slugs are case-sensitive and contain 1–64 ASCII letters, digits, underscores, or hyphens.</p>
@@ -5380,6 +5385,7 @@ npm run deploy:dry-run
 <li><a href="https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/">Access service tokens</a></li>
 <li><a href="https://developers.cloudflare.com/radar/get-started/first-request/">Radar token setup</a></li>
 <li><a href="https://developers.cloudflare.com/workers/runtime-apis/request/">Request metadata, including connection RTT</a></li>
+<li><a href="https://developers.cloudflare.com/workers/runtime-apis/websockets/">WebSocket API</a> · <a href="https://developers.cloudflare.com/workers/runtime-apis/performance/">Performance and timers</a></li>
 <li><a href="https://developers.cloudflare.com/workers/wrangler/commands/workers/">Wrangler Worker commands</a></li>
 </ul>
 <p>These references do not certify that a particular account, DNS record, secret, or deployment works. Use the <a href="#en-guide">guide&#39;s verification steps</a> for the instance you operate.</p>

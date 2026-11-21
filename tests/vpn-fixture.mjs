@@ -23,9 +23,47 @@ export function mockRadar(category = 'ACCESS_ISP') {
   return () => stub.mock.restore();
 }
 
-/** Exercise the page's one HTTP probe with a controlled client duration. */
-export async function collectLatency(postProbe, challenge, elapsed = 12) {
-  const response = await postProbe(new URLSearchParams({ challenge }).toString());
-  assert.equal(response.status, 200, await response.clone().text());
-  return JSON.stringify({ receipt: await response.text(), elapsed });
+// Native workerd supplies the upgraded endpoint; this client only echoes challenges.
+export async function collectLatency(response, echoDelays = []) {
+  assert.equal(response.status, 101);
+  assert.equal(response.headers.get('sec-websocket-protocol'), 'linro-rtt-v3');
+  const socket = response.webSocket;
+  socket.accept();
+  const seen = new Set();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      socket.close();
+      reject(Error('RTT fixture timed out'));
+    }, 15000);
+    socket.addEventListener('error', () => {
+      clearTimeout(timer);
+      reject(Error('RTT socket failed'));
+    });
+    socket.addEventListener('close', () => {
+      clearTimeout(timer);
+      reject(Error('RTT socket closed early'));
+    });
+    socket.addEventListener('message', ({ data }) => {
+      try {
+        if (data.startsWith('receipt.')) {
+          assert.equal(seen.size, 5);
+          clearTimeout(timer);
+          resolve(data.slice(8));
+          socket.close();
+        } else {
+          assert.match(data, /^[A-Za-z0-9_-]{22}$/);
+          assert.ok(!seen.has(data));
+          const delay = echoDelays[seen.size];
+          seen.add(data);
+          if (delay) setTimeout(() => socket.send(data), delay);
+          else socket.send(data);
+        }
+      } catch (err) {
+        clearTimeout(timer);
+        reject(err);
+        socket.close();
+      }
+    });
+    socket.send('ready');
+  });
 }

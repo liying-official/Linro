@@ -438,7 +438,7 @@ Owner 交互式，只接受 `site_name`，1–80 字符且非全空白：
 | GET/HEAD `/{slug}` | 跳转、文本、保护页或拒绝 |
 | POST `/__Linro_unlock/{slug}` | 密码解锁 |
 | POST `/__Linro_browser/{slug}` | 浏览器证明提交 |
-| POST `/__Linro_rtt` | 单链 VPN 挑战的一次 RTT 探针 |
+| GET `/__Linro_rtt`（WebSocket Upgrade） | 一次连接，五轮服务端 RTT 挑战，成功升级返回 101 |
 
 内部 POST 路径用错方法返回 405 `Allow: POST`；其他公开路径只接受 GET/HEAD。公开限流先于 health、资源和业务读取，因此生产限流绑定故障也可能让 health 为 503。
 
@@ -462,7 +462,7 @@ Owner 交互式，只接受 `site_name`，1–80 字符且非全空白：
 
 全局采集需要 `BROWSER_TIMEZONE_ENABLED=true`、统计开启和实际 Analytics 写入绑定；单链 `block_vpn=1` 则独立要求检查。浏览器报告的时区不可信，与平台 IP 时区只是不同来源的信号。
 
-POST `/__Linro_browser/{slug}` 使用 `application/x-www-form-urlencoded` 表单正文，包含唯一的 `challenge` 和 `timezone`。block_vpn 还须 `latency`，其 elapsed 为本次毫秒耗时、receipt 为同挑战加密回执。正文最多 4096 字节，挑战最长 2200 字符，时区最长 64。
+POST `/__Linro_browser/{slug}` 使用 `application/x-www-form-urlencoded` 表单，含唯一的 `challenge` 和 `timezone`。开启 `block_vpn` 时，`latency` 只传 Worker 签发的不透明回执，最长 128 字符。表单最多 4096 字节，挑战最长 2200 字符，时区最长 64 字符。
 
 Accept 只控制成功结果，不改变正文或认证：明确接受 application/json 且 q 有效大于 0 时返回 200：
 
@@ -474,7 +474,9 @@ Accept 只控制成功结果，不改变正文或认证：明确接受 applicati
 
 恢复 GET 必须同时有恰好一个 `_Linro_check=1` 和有效 Cookie。证明最长 120 秒，不延长挑战窗口，绑定规则、主机、查询和网络上下文；缺一、过期或变化都不能绕过。最终会清除 Cookie，但没有服务端一次性消费表，不是绝对防重放的一次性凭据。
 
-单链 VPN 检查在密码前判断 Tor 与 Radar ASN，只允许 `ACCESS_ISP` 或 `ORGANIZATION`。通过后浏览器发一次 `/__Linro_rtt` 同源 POST，使用相同查询部分，表单只含一个有效 `challenge`，也受 4096 字节和同源校验限制。成功返回 200 `text/plain` 的加密回执，最多 128 个 base64url 字符、no-store；浏览器把它与非负有限数字 `elapsed` 一起编码成 JSON 字符串，作为后续表单的 `latency` 字段。耗时与平台 RTT 绝对差大于 50 ms 拒绝，缺有效回执也拒绝；探针不扣次数。提前被网络策略拒绝时直接为 403 结果页，不发送探针。
+单链 VPN 检查先于密码页检查 Tor 和 ASN，仅允许 Radar 的 `ACCESS_ISP` 与 `ORGANIZATION`。被提前拒绝时不建立测量连接。
+
+浏览器以相同查询串向 `/__Linro_rtt` 发起同源 WebSocket GET 升级，子协议列表依次为 `linro-rtt-v3`、当前签名挑战。Worker 校验来源与挑战后选定第一个子协议。普通 GET 返回 426，旧 POST 返回 405。浏览器发 `ready` 后开始计时，握手时间不计入样本。Worker 在一条同源 WebSocket 上发出 5 轮随机挑战，浏览器逐条原样回传。每次收到正确回包后等待 400 ms 再发下一轮。Worker 计时并与该连接的 TCP 或 QUIC RTT 比较。五轮全部完成且至少一轮的绝对差严格小于 55 ms 才通过；恰好 55 ms 不算通过。 会话最长 30 秒，且受原挑战到期时间限制。完成时末帧 `receipt.<回执>` 携带绑定原挑战的认证结果；错误回包、超时或中断无法取得放行凭据。测量不消耗短链次数。
 
 内置 JS 使用普通导航继续，避免把密码/浏览器 POST 链式提交到跨站目标。旧式 303 表单仍在，但不能保证无 JS/Cookie 的客户端完成所有流程。保护页提供中文/English 切换。
 
