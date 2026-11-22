@@ -2,15 +2,15 @@
 
 [English](LICENSING.en-US.md) · [README](../README.md) · [发布说明](RELEASE.md)
 
-可以把开源许可证理解为使用和分发软件时要遵守的规则。Linro 的规则是 **AGPL-3.0-only**，即 GNU Affero General Public License 第 3 版，不含“或更新版本”。完整条款在 [LICENSE](../LICENSE)；本页帮助你找到要做的事，不替代原文。
+可以把开源许可证理解为使用和分发软件时要遵守的规则。Linro 的规则是 **AGPL-3.0-only**，即 GNU Affero General Public License 第 3 版，不含“或更新版本”。完整条款在 [LICENSE](./licenses/LICENSE.txt)；本页帮助你找到要做的事，不替代原文。
 
 ## 哪些许可需要一起保留？
 
 | 内容 | 在哪里看 |
 | --- | --- |
-| Linro 整体 | [AGPL-3.0-only](../LICENSE) |
-| TailAdmin React 适配 | [MIT 通知](../LICENSES/TailAdmin-MIT.txt)，上游固定修订见 [NOTICE](../NOTICE) |
-| Recharts | [MIT 通知](../LICENSES/Recharts-MIT.txt) |
+| Linro 整体 | [AGPL-3.0-only](./licenses/LICENSE.txt) |
+| TailAdmin React 适配 | [MIT 通知](./licenses/TailAdmin-MIT.txt)，上游固定修订见 [NOTICE](./licenses/NOTICE.txt) |
+| Recharts | [MIT 通知](./licenses/Recharts-MIT.txt) |
 | 其他依赖 | 各依赖自己的许可证，以及随包锁文件记录的版本 |
 
 MIT 内容仍保留自己的通知，不能因此把 Linro 整体改称 MIT。`LICENSE`、`NOTICE`、`LICENSES/` 中的权利人署名不是需要删除的私人资料。不要改写权威许可文本，也不要自行新增例外授权。包内未包含 TailAdmin Pro 或 ApexCharts，不代表已经逐一审查所有传递依赖的许可义务。

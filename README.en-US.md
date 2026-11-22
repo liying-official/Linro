@@ -75,4 +75,4 @@ Bug reports and pull requests are welcome. Include the version, what you expecte
 
 ## License
 
-Linro uses [AGPL-3.0-only](LICENSE). The TailAdmin and Recharts MIT notices are in [LICENSES](LICENSES/); attribution is in [NOTICE](NOTICE). Read [Licensing and Corresponding Source](docs/LICENSING.en-US.md) before publishing a modified deployment.
+Linro uses [AGPL-3.0-only](LICENSE). See the MIT notices for [TailAdmin](LICENSES/TailAdmin-MIT.txt) and [Recharts](LICENSES/Recharts-MIT.txt), and [NOTICE](NOTICE) for attribution. Read [Licensing and Corresponding Source](docs/LICENSING.en-US.md) before publishing a modified deployment.

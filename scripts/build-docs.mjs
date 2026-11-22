@@ -1,10 +1,16 @@
 import { createHash } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Marked, Renderer } from 'marked';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const licenseCopies = new Map([
+  ['LICENSE', 'docs/licenses/LICENSE.txt'],
+  ['NOTICE', 'docs/licenses/NOTICE.txt'],
+  ['LICENSES/TailAdmin-MIT.txt', 'docs/licenses/TailAdmin-MIT.txt'],
+  ['LICENSES/Recharts-MIT.txt', 'docs/licenses/Recharts-MIT.txt'],
+]);
 const htmlEscape = (value) =>
   String(value).replace(
     /[&<>"']/g,
@@ -59,8 +65,10 @@ function relativeLink(href, doc, byFile) {
     const language = new URLSearchParams(query ?? '').get('lang') === 'en' ? 'en' : doc.lang;
     return `#${language}-guide`;
   }
-  const relative = posix.relative('docs', target) + (file.endsWith('/') ? '/' : '');
-  return `${relative}${query ? '?' + query : ''}${fragment ? '#' + fragment : ''}`;
+  const relative = posix.relative('docs', licenseCopies.get(target) ?? target);
+  const path = relative === '..' || relative.startsWith('../') ? relative : './' + relative;
+  const slash = file.endsWith('/') && !path.endsWith('/') ? '/' : '';
+  return `${path}${slash}${query ? '?' + query : ''}${fragment ? '#' + fragment : ''}`;
 }
 
 export function renderDocument(doc, byFile) {
@@ -159,6 +167,32 @@ export async function buildDocumentation(root = ROOT) {
 <script>${client}</script></body></html>\n`;
 }
 
+export async function syncDocumentation(root = ROOT, { check = false } = {}) {
+  const outputs = await Promise.all(
+    [...licenseCopies].map(async ([source, target]) => [
+      target,
+      await readFile(resolve(root, source)),
+    ]),
+  );
+  outputs.push(['docs/index.html', Buffer.from(await buildDocumentation(root))]);
+  if (!check) await mkdir(resolve(root, 'docs/licenses'), { recursive: true });
+  for (const [name, bytes] of outputs) {
+    const path = resolve(root, name);
+    if (check) {
+      const current = await readFile(path).catch((error) => {
+        if (error.code === 'ENOENT') return null;
+        throw error;
+      });
+      if (!current?.equals(bytes))
+        throw new Error(
+          `${name} is missing or out of date. Run npm run build:docs and commit the result.`,
+        );
+    } else {
+      await writeFile(path, bytes);
+    }
+  }
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   if (args.length > 1 || (args.length === 1 && args[0] !== '--check')) {
@@ -166,18 +200,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     process.exitCode = 1;
   } else {
     try {
-      const html = await buildDocumentation();
-      const output = resolve(ROOT, 'docs/index.html');
-      if (args[0] === '--check') {
-        if ((await readFile(output, 'utf8')) !== html)
-          throw new Error(
-            'docs/index.html is out of date. Run npm run build:docs and commit the result.',
-          );
-        console.log('Offline documentation matches every Markdown source.');
-      } else {
-        await writeFile(output, html);
-        console.log('Built docs/index.html from both language editions.');
-      }
+      const check = args[0] === '--check';
+      await syncDocumentation(ROOT, { check });
+      console.log(
+        check
+          ? 'Handbook and license copies match their sources.'
+          : 'Built docs/index.html and docs/licenses/.',
+      );
     } catch (error) {
       console.error(error.message);
       process.exitCode = 1;

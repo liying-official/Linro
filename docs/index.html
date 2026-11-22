@@ -6,7 +6,7 @@
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light"><meta name="theme-color" content="#e7f4f8">
 <title>Linro v1.0.2 · 使用手册 / Handbook</title>
-<!-- Generated from the repository Markdown. Rebuild: npm run build:docs. Source digest: 68e351384b07147b02f65086db67ba6847ccbcf033c761f606651f74f4fb5013 -->
+<!-- Generated from the repository Markdown. Rebuild: npm run build:docs. Source digest: d3c31b7b8c9cfc1b5959b9f3e747a9baf92590157fad458cbadbe8c4176e72a9 -->
 <style>:root {
   color-scheme: light;
   --ink: #173d4a;
@@ -658,7 +658,7 @@ mark {
 <p>问题和建议请说明版本、你想完成的操作、实际结果，以及已脱敏的错误信息。不要在公开 Issue 中贴密码、令牌、真实业务数据或数据库备份。安全问题请按<a href="#zh-security-reporting">私密报告说明</a>处理。</p>
 <p>项目使用 React、TypeScript、Vite 和 Tailwind CSS 构建管理界面，并使用 TailAdmin 与 Recharts 的相关开源内容。</p>
 <h2 id="zh-readme-许可证">许可证<a class="heading-link" href="#zh-readme-许可证" aria-label="本节链接">#</a></h2>
-<p>Linro 采用 <strong><a href="../LICENSE">AGPL-3.0-only</a></strong>。对外提供修改后的网络服务时，请阅读<a href="#zh-licensing">许可证与对应源码说明</a>，并提供适用条款要求的源码。第三方署名和 MIT 通知保留在 <a href="../NOTICE">NOTICE</a> 与 <a href="../LICENSES/">LICENSES</a> 中。</p>
+<p>Linro 采用 <strong><a href="./licenses/LICENSE.txt">AGPL-3.0-only</a></strong>。对外提供修改后的网络服务时，请阅读<a href="#zh-licensing">许可证与对应源码说明</a>，并提供适用条款要求的源码。第三方署名见 <a href="./licenses/NOTICE.txt">NOTICE</a>，MIT 通知见 <a href="./licenses/TailAdmin-MIT.txt">TailAdmin</a> 和 <a href="./licenses/Recharts-MIT.txt">Recharts</a>。</p>
 </article>
 <article id="zh-guide" data-page="guide" data-language="zh" lang="zh-CN" aria-label="安装与使用">
 <p class="source-link"><a href="GUIDE.md">查看 Markdown 原文</a></p>
@@ -2495,7 +2495,7 @@ npm run deploy:dry-run
 <h2 id="zh-release-2-让源码与文档副本保持一致">2. 让源码与文档副本保持一致<a class="heading-link" href="#zh-release-2-让源码与文档副本保持一致" aria-label="本节链接">#</a></h2>
 <ul>
 <li>修改 <code>apps/demo/</code> 或共享管理界面后，重建 <code>docs/demo/</code>。</li>
-<li>修改 README 或中英文 Markdown 后，运行 <code>npm run build:docs</code> 重建 <code>docs/index.html</code>。</li>
+<li>修改 README、手册 Markdown 或许可原件后，运行 <code>npm run build:docs</code>。生成器重建 <code>docs/index.html</code>，并把 <code>LICENSE</code>、<code>NOTICE</code> 和两份 MIT 通知逐字节同步到 <code>docs/licenses/</code>。离线分发时将该目录与 <code>index.html</code> 放在一起。</li>
 <li>离线 HTML 由 Markdown 生成，不再手工维护另一套正文；Markdown 解析依赖只用于构建。</li>
 <li>核对两种语言的版本、命令、链接、字段和限制。涉及旧版本时，说明与当前版本的升级或兼容关系。</li>
 </ul>
@@ -2648,14 +2648,14 @@ npm run deploy:dry-run
 </tbody></table>
 </div>
 <p>这些资料说明平台机制，不证明某个真实部署已经配置正确。仍需核对自己的账户、绑定、DNS、身份策略和用量。</p>
-<p>许可证权威原文见 <a href="../LICENSE">LICENSE</a>，第三方归属见 <a href="../NOTICE">NOTICE</a>，操作说明见 <a href="#zh-licensing">LICENSING</a>。</p>
+<p>许可证权威原文见 <a href="./licenses/LICENSE.txt">LICENSE</a>，第三方归属见 <a href="./licenses/NOTICE.txt">NOTICE</a>，操作说明见 <a href="#zh-licensing">LICENSING</a>。</p>
 </article>
 <article id="zh-licensing" data-page="licensing" data-language="zh" lang="zh-CN" aria-label="许可证说明">
 <p class="source-link"><a href="LICENSING.md">查看 Markdown 原文</a></p>
 <details class="page-toc"><summary>本页目录</summary><ol><li class="depth-2"><a href="#zh-licensing-哪些许可需要一起保留">哪些许可需要一起保留？</a></li><li class="depth-2"><a href="#zh-licensing-对外提供服务时源码入口有什么用">对外提供服务时，源码入口有什么用？</a></li><li class="depth-2"><a href="#zh-licensing-地址怎么填">地址怎么填？</a></li></ol></details>
 <h1 id="zh-licensing-linro-v102-许可证与对应源码">Linro v1.0.2 许可证与对应源码<a class="heading-link" href="#zh-licensing-linro-v102-许可证与对应源码" aria-label="本节链接">#</a></h1>
 <p><a href="#en-licensing">English</a> · <a href="#zh-readme">README</a> · <a href="#zh-release">发布说明</a></p>
-<p>可以把开源许可证理解为使用和分发软件时要遵守的规则。Linro 的规则是 <strong>AGPL-3.0-only</strong>，即 GNU Affero General Public License 第 3 版，不含“或更新版本”。完整条款在 <a href="../LICENSE">LICENSE</a>；本页帮助你找到要做的事，不替代原文。</p>
+<p>可以把开源许可证理解为使用和分发软件时要遵守的规则。Linro 的规则是 <strong>AGPL-3.0-only</strong>，即 GNU Affero General Public License 第 3 版，不含“或更新版本”。完整条款在 <a href="./licenses/LICENSE.txt">LICENSE</a>；本页帮助你找到要做的事，不替代原文。</p>
 <h2 id="zh-licensing-哪些许可需要一起保留">哪些许可需要一起保留？<a class="heading-link" href="#zh-licensing-哪些许可需要一起保留" aria-label="本节链接">#</a></h2>
 <div class="table-scroll" tabindex="0"><table>
 <thead>
@@ -2666,15 +2666,15 @@ npm run deploy:dry-run
 </thead>
 <tbody><tr>
 <td>Linro 整体</td>
-<td><a href="../LICENSE">AGPL-3.0-only</a></td>
+<td><a href="./licenses/LICENSE.txt">AGPL-3.0-only</a></td>
 </tr>
 <tr>
 <td>TailAdmin React 适配</td>
-<td><a href="../LICENSES/TailAdmin-MIT.txt">MIT 通知</a>，上游固定修订见 <a href="../NOTICE">NOTICE</a></td>
+<td><a href="./licenses/TailAdmin-MIT.txt">MIT 通知</a>，上游固定修订见 <a href="./licenses/NOTICE.txt">NOTICE</a></td>
 </tr>
 <tr>
 <td>Recharts</td>
-<td><a href="../LICENSES/Recharts-MIT.txt">MIT 通知</a></td>
+<td><a href="./licenses/Recharts-MIT.txt">MIT 通知</a></td>
 </tr>
 <tr>
 <td>其他依赖</td>
@@ -2820,7 +2820,7 @@ npm run local:init
 <h2 id="en-readme-contributing">Contributing<a class="heading-link" href="#en-readme-contributing" aria-label="Link to section">#</a></h2>
 <p>Bug reports and pull requests are welcome. Include the version, what you expected, and a small example using fictional data. For a security problem, follow the <a href="#en-security-reporting">private reporting instructions</a>; keep credentials and user data out of public issues.</p>
 <h2 id="en-readme-license">License<a class="heading-link" href="#en-readme-license" aria-label="Link to section">#</a></h2>
-<p>Linro uses <a href="../LICENSE">AGPL-3.0-only</a>. The TailAdmin and Recharts MIT notices are in <a href="../LICENSES/">LICENSES</a>; attribution is in <a href="../NOTICE">NOTICE</a>. Read <a href="#en-licensing">Licensing and Corresponding Source</a> before publishing a modified deployment.</p>
+<p>Linro uses <a href="./licenses/LICENSE.txt">AGPL-3.0-only</a>. See the MIT notices for <a href="./licenses/TailAdmin-MIT.txt">TailAdmin</a> and <a href="./licenses/Recharts-MIT.txt">Recharts</a>, and <a href="./licenses/NOTICE.txt">NOTICE</a> for attribution. Read <a href="#en-licensing">Licensing and Corresponding Source</a> before publishing a modified deployment.</p>
 </article>
 <article id="en-guide" data-page="guide" data-language="en" lang="en" aria-label="Install and use">
 <p class="source-link"><a href="GUIDE.en-US.md">Read the Markdown source</a></p>
@@ -5278,7 +5278,7 @@ npm run build:demo
 npm run build:docs
 npm run deploy:dry-run
 </code></pre>
-<p><code>build:docs</code> regenerates the offline <code>docs/index.html</code> from the maintained Markdown. <code>build:demo</code> regenerates <code>docs/demo/</code> from the shared interface and the demo simulator. Include these refreshed files when committing the release. CI checks generated documentation/demo synchronization; do not edit generated HTML as a separate version of the manual.</p>
+<p><code>build:docs</code> regenerates <code>docs/index.html</code> from Markdown and copies <code>LICENSE</code>, <code>NOTICE</code> and both MIT notices byte for byte into <code>docs/licenses/</code>. Distribute the <code>licenses/</code> directory alongside <code>index.html</code> for offline reading. <code>build:demo</code> regenerates <code>docs/demo/</code> from the shared interface and the demo simulator. Include these refreshed files when committing the release. CI checks generated documentation/demo synchronization; do not edit generated HTML as a separate version of the manual.</p>
 <p>Browser tests need a working Chrome/Chromium environment; set <code>CFL_CHROMIUM_PATH</code> to the installed executable if needed. Keep its sandbox enabled. An unavailable browser is an uncompleted check, not a pass. On Linux/WSL, <code>npm run test:disconnect</code> additionally checks real loopback disconnect behavior for Admin statistics.</p>
 <p>The runtime suite uses the toolchain pinned in the project&#39;s dependency tree. <code>npm run toolchain:versions</code> displays it. A dry run packages Workers without switching production traffic; it does not prove real DNS, Access, secrets, or database behavior.</p>
 <h2 id="en-release-3-stage-the-files-to-publish">3. Stage the files to publish<a class="heading-link" href="#en-release-3-stage-the-files-to-publish" aria-label="Link to section">#</a></h2>
@@ -5390,7 +5390,7 @@ npm run deploy:dry-run
 </ul>
 <p>These references do not certify that a particular account, DNS record, secret, or deployment works. Use the <a href="#en-guide">guide&#39;s verification steps</a> for the instance you operate.</p>
 <h2 id="en-sources-license-sources">License sources<a class="heading-link" href="#en-sources-license-sources" aria-label="Link to section">#</a></h2>
-<p>The authoritative project license is <a href="../LICENSE">LICENSE</a>. Attribution and fixed upstream references are in <a href="../NOTICE">NOTICE</a> and <a href="../LICENSES/">LICENSES</a>. The beginner explanation in <a href="#en-licensing">Licensing</a> does not replace those texts.</p>
+<p>The authoritative project license is <a href="./licenses/LICENSE.txt">LICENSE</a>. Attribution and fixed upstream references are in <a href="./licenses/NOTICE.txt">NOTICE</a>. See the MIT notices for <a href="./licenses/TailAdmin-MIT.txt">TailAdmin</a> and <a href="./licenses/Recharts-MIT.txt">Recharts</a>. The beginner explanation in <a href="#en-licensing">Licensing</a> does not replace those texts.</p>
 </article>
 <article id="en-licensing" data-page="licensing" data-language="en" lang="en" aria-label="License guide">
 <p class="source-link"><a href="LICENSING.en-US.md">Read the Markdown source</a></p>
@@ -5399,7 +5399,7 @@ npm run deploy:dry-run
 <p><a href="#zh-licensing">简体中文</a> · <a href="#en-readme">README</a> · <a href="#en-release">Release guide</a></p>
 <p>Think of source code as the recipe for the running application. Linro&#39;s license explains when recipients and network users must be able to obtain that recipe, along with the material needed to build it.</p>
 <h2 id="en-licensing-which-license-applies">Which license applies?<a class="heading-link" href="#en-licensing-which-license-applies" aria-label="Link to section">#</a></h2>
-<p>Linro uses <strong>AGPL-3.0-only</strong>: GNU Affero General Public License version 3, without the “or any later version” option. The full <a href="../LICENSE">LICENSE</a> is authoritative. This page is a practical explanation, not a replacement for its terms.</p>
+<p>Linro uses <strong>AGPL-3.0-only</strong>: GNU Affero General Public License version 3, without the “or any later version” option. The full <a href="./licenses/LICENSE.txt">LICENSE</a> is authoritative. This page is a practical explanation, not a replacement for its terms.</p>
 <div class="table-scroll" tabindex="0"><table>
 <thead>
 <tr>
@@ -5409,15 +5409,15 @@ npm run deploy:dry-run
 </thead>
 <tbody><tr>
 <td>Linro as a whole</td>
-<td><a href="../LICENSE">AGPL-3.0-only</a> and existing file notices</td>
+<td><a href="./licenses/LICENSE.txt">AGPL-3.0-only</a> and existing file notices</td>
 </tr>
 <tr>
 <td>Adapted TailAdmin React interface</td>
-<td><a href="../LICENSES/TailAdmin-MIT.txt">TailAdmin MIT notice</a>; upstream revision in <a href="../NOTICE">NOTICE</a></td>
+<td><a href="./licenses/TailAdmin-MIT.txt">TailAdmin MIT notice</a>; upstream revision in <a href="./licenses/NOTICE.txt">NOTICE</a></td>
 </tr>
 <tr>
 <td>Recharts</td>
-<td><a href="../LICENSES/Recharts-MIT.txt">Recharts MIT notice</a></td>
+<td><a href="./licenses/Recharts-MIT.txt">Recharts MIT notice</a></td>
 </tr>
 <tr>
 <td>Other dependencies</td>

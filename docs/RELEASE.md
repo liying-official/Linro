@@ -28,7 +28,7 @@ npm run deploy:dry-run
 ## 2. 让源码与文档副本保持一致
 
 - 修改 `apps/demo/` 或共享管理界面后，重建 `docs/demo/`。
-- 修改 README 或中英文 Markdown 后，运行 `npm run build:docs` 重建 `docs/index.html`。
+- 修改 README、手册 Markdown 或许可原件后，运行 `npm run build:docs`。生成器重建 `docs/index.html`，并把 `LICENSE`、`NOTICE` 和两份 MIT 通知逐字节同步到 `docs/licenses/`。离线分发时将该目录与 `index.html` 放在一起。
 - 离线 HTML 由 Markdown 生成，不再手工维护另一套正文；Markdown 解析依赖只用于构建。
 - 核对两种语言的版本、命令、链接、字段和限制。涉及旧版本时，说明与当前版本的升级或兼容关系。
 

@@ -26,7 +26,7 @@ npm run build:docs
 npm run deploy:dry-run
 ```
 
-`build:docs` regenerates the offline `docs/index.html` from the maintained Markdown. `build:demo` regenerates `docs/demo/` from the shared interface and the demo simulator. Include these refreshed files when committing the release. CI checks generated documentation/demo synchronization; do not edit generated HTML as a separate version of the manual.
+`build:docs` regenerates `docs/index.html` from Markdown and copies `LICENSE`, `NOTICE` and both MIT notices byte for byte into `docs/licenses/`. Distribute the `licenses/` directory alongside `index.html` for offline reading. `build:demo` regenerates `docs/demo/` from the shared interface and the demo simulator. Include these refreshed files when committing the release. CI checks generated documentation/demo synchronization; do not edit generated HTML as a separate version of the manual.
 
 Browser tests need a working Chrome/Chromium environment; set `CFL_CHROMIUM_PATH` to the installed executable if needed. Keep its sandbox enabled. An unavailable browser is an uncompleted check, not a pass. On Linux/WSL, `npm run test:disconnect` additionally checks real loopback disconnect behavior for Admin statistics.
 

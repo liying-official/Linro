@@ -6,13 +6,13 @@ Think of source code as the recipe for the running application. Linro's license 
 
 ## Which license applies?
 
-Linro uses **AGPL-3.0-only**: GNU Affero General Public License version 3, without the “or any later version” option. The full [LICENSE](../LICENSE) is authoritative. This page is a practical explanation, not a replacement for its terms.
+Linro uses **AGPL-3.0-only**: GNU Affero General Public License version 3, without the “or any later version” option. The full [LICENSE](./licenses/LICENSE.txt) is authoritative. This page is a practical explanation, not a replacement for its terms.
 
 | Material | Notice to retain |
 | --- | --- |
-| Linro as a whole | [AGPL-3.0-only](../LICENSE) and existing file notices |
-| Adapted TailAdmin React interface | [TailAdmin MIT notice](../LICENSES/TailAdmin-MIT.txt); upstream revision in [NOTICE](../NOTICE) |
-| Recharts | [Recharts MIT notice](../LICENSES/Recharts-MIT.txt) |
+| Linro as a whole | [AGPL-3.0-only](./licenses/LICENSE.txt) and existing file notices |
+| Adapted TailAdmin React interface | [TailAdmin MIT notice](./licenses/TailAdmin-MIT.txt); upstream revision in [NOTICE](./licenses/NOTICE.txt) |
+| Recharts | [Recharts MIT notice](./licenses/Recharts-MIT.txt) |
 | Other dependencies | Their own licenses and applicable notices |
 
 The third-party MIT notices do not make the entire Linro project MIT-licensed. Keep `LICENSE`, `NOTICE`, and `LICENSES/*.txt` intact when redistributing. The provided source and lockfile do not include ApexCharts or TailAdmin Pro; this statement is not a legal audit of every transitive dependency.

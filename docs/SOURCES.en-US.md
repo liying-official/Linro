@@ -48,4 +48,4 @@ These references do not certify that a particular account, DNS record, secret, o
 
 ## License sources
 
-The authoritative project license is [LICENSE](../LICENSE). Attribution and fixed upstream references are in [NOTICE](../NOTICE) and [LICENSES](../LICENSES/). The beginner explanation in [Licensing](LICENSING.en-US.md) does not replace those texts.
+The authoritative project license is [LICENSE](./licenses/LICENSE.txt). Attribution and fixed upstream references are in [NOTICE](./licenses/NOTICE.txt). See the MIT notices for [TailAdmin](./licenses/TailAdmin-MIT.txt) and [Recharts](./licenses/Recharts-MIT.txt). The beginner explanation in [Licensing](LICENSING.en-US.md) does not replace those texts.

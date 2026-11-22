@@ -63,4 +63,4 @@ KV 和 Analytics Engine 是可选服务。默认关闭可选功能能减少额�
 
 ## 许可证
 
-Linro 采用 **[AGPL-3.0-only](LICENSE)**。对外提供修改后的网络服务时，请阅读[许可证与对应源码说明](docs/LICENSING.md)，并提供适用条款要求的源码。第三方署名和 MIT 通知保留在 [NOTICE](NOTICE) 与 [LICENSES](LICENSES/) 中。
+Linro 采用 **[AGPL-3.0-only](LICENSE)**。对外提供修改后的网络服务时，请阅读[许可证与对应源码说明](docs/LICENSING.md)，并提供适用条款要求的源码。第三方署名见 [NOTICE](NOTICE)，MIT 通知见 [TailAdmin](LICENSES/TailAdmin-MIT.txt) 和 [Recharts](LICENSES/Recharts-MIT.txt)。

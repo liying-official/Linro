@@ -1,8 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import { buildDocumentation, documentationFiles, headingSlug, renderDocument } from '../scripts/build-docs.mjs';
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { buildDocumentation, documentationFiles, headingSlug, renderDocument, syncDocumentation } from '../scripts/build-docs.mjs';
+
+const notices = {
+  'LICENSE.txt': 'LICENSE',
+  'NOTICE.txt': 'NOTICE',
+  'TailAdmin-MIT.txt': 'LICENSES/TailAdmin-MIT.txt',
+  'Recharts-MIT.txt': 'LICENSES/Recharts-MIT.txt',
+};
 
 test('offline handbook contains every document in both languages with unique working fragments', async () => {
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
@@ -14,8 +23,48 @@ test('offline handbook contains every document in both languages with unique wor
     const id = match[1].replaceAll('&amp;', '&');
     assert.ok(ids.includes(id), `Unresolved offline fragment: ${id}`);
   }
-  assert.match(html, /href="\.\.\/LICENSES\/"/, 'source directory links must retain their trailing slash');
+  assert.doesNotMatch(html, /href="\.\.\/(?:LICENSE|NOTICE)(?:S?\/|")/);
+  for (const lang of ['zh', 'en']) {
+    for (const section of ['readme', 'licensing']) {
+      const article = html.split(`<article id="${lang}-${section}"`)[1].split('</article>')[0];
+      for (const name of Object.keys(notices)) {
+        assert.ok(article.includes(`href="./licenses/${name}"`), `${lang}-${section}: ${name}`);
+      }
+    }
+  }
   assert.equal(html, await buildDocumentation(), 'building twice must be deterministic');
+});
+
+test('a docs build copies the original notice bytes and check mode detects missing and stale copies', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'linro-handbook-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const source = new URL('../', import.meta.url);
+  const { version } = JSON.parse(await readFile(new URL('package.json', source), 'utf8'));
+  const inputs = [
+    'package.json',
+    ...documentationFiles(version).map(doc => doc.file),
+    ...Object.values(notices),
+    'scripts/docs-assets/style.css',
+    'scripts/docs-assets/client.mjs',
+  ];
+  for (const file of inputs) {
+    await mkdir(dirname(join(root, file)), { recursive: true });
+    await copyFile(new URL(file, source), join(root, file));
+  }
+  await syncDocumentation(root);
+  for (const [name, original] of Object.entries(notices)) {
+    assert.deepEqual(await readFile(join(root, 'docs/licenses', name)), await readFile(join(root, original)));
+  }
+  const copy = join(root, 'docs/licenses/NOTICE.txt');
+  await rm(copy);
+  await assert.rejects(syncDocumentation(root, { check: true }), /docs\/licenses\/NOTICE\.txt/);
+  await assert.rejects(readFile(copy), { code: 'ENOENT' });
+  await writeFile(copy, 'stale notice');
+  await assert.rejects(syncDocumentation(root, { check: true }), /docs\/licenses\/NOTICE\.txt/);
+  assert.equal(await readFile(copy, 'utf8'), 'stale notice');
+  await syncDocumentation(root);
+  await syncDocumentation(root, { check: true });
+  assert.deepEqual(await readFile(copy), await readFile(join(root, 'NOTICE')));
 });
 
 test('offline handbook is self-contained and authorizes only its exact script and stylesheet', async () => {
@@ -37,6 +86,7 @@ test('Markdown renderer preserves tables and cross-file links while escaping exe
   assert.match(html, /id="en-guide-hello-world"/);
   assert.match(html, /id="en-guide-start"/);
   assert.match(html, /href="#en-api-requests"/);
+  assert.match(renderDocument({ ...doc, markdown: '[Examples](../examples/)' }, new Map()), /href="\.\.\/examples\/"/);
   assert.match(html, /<table>/);
   assert.match(html, /<td>yes<\/td>/);
   assert.doesNotMatch(html, /<script|href="javascript:/);

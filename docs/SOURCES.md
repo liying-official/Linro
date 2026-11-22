@@ -46,4 +46,4 @@
 
 这些资料说明平台机制，不证明某个真实部署已经配置正确。仍需核对自己的账户、绑定、DNS、身份策略和用量。
 
-许可证权威原文见 [LICENSE](../LICENSE)，第三方归属见 [NOTICE](../NOTICE)，操作说明见 [LICENSING](LICENSING.md)。
+许可证权威原文见 [LICENSE](./licenses/LICENSE.txt)，第三方归属见 [NOTICE](./licenses/NOTICE.txt)，操作说明见 [LICENSING](LICENSING.md)。
